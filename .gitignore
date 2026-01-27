@@ -1,0 +1,5 @@
+# Environment variables file (contains sensitive keys, never commit this)
+.env
+
+# Node.js dependencies (should be installed via npm/yarn, not pushed to repo)
+node_modules/
