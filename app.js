@@ -8,13 +8,13 @@ const cookieParser = require("cookie-parser");
 // =============================================
 const connectMongoDB = require("./src/config/mongoose");
 const { connectMySQL, sequelize } = require("./src/config/sequelize");
-// const seedAdmin = require("./utils/seedAdmin");
+const seedAdmin = require("./src/utils/seedAdmin");
 
 // =============================================
 // 🧠 Routes Import
 // =============================================
 // SQL-based routes
-// const userRoutes = require("./routes/userRouter");
+const userRoutes = require("./src/routes/userRoutes");
 
 // MongoDB-based routes
 // const categoryRoutes = require("./routes/categoryRouter");
@@ -38,6 +38,8 @@ app.use(express.json({ limit: "20kb" })); // Parse incoming JSON payloads
 app.use(express.urlencoded({ extended: true, limit: "20kb" })); // Handle URL-encoded data
 app.use(express.static("public")); // Serve static files (e.g., images, uploads)
 app.use(cookieParser()); // Parse cookies
+const errorHandler = require("./src/middlewares/errorHandler");
+
 
 // =============================================
 // 🗄️ Database Initialization & Sync
@@ -58,7 +60,7 @@ app.use(cookieParser()); // Parse cookies
     console.log("✔ Tables updated safely without deleting data.");
 
     // 👑 Seed Default Admin User
-    // await seedAdmin();
+    await seedAdmin();
     
   } catch (error) {
     console.error("❌ Database connection/sync error:", error.message);
@@ -68,7 +70,7 @@ app.use(cookieParser()); // Parse cookies
 // =============================================
 // 🌐 API Routes
 // =============================================
-// app.use("/api/users", userRoutes); // User CRUD & Authentication
+app.use("/api/users", userRoutes); // User CRUD & Authentication
 // app.use("/api/categories", categoryRoutes); // Category management
 
 // =============================================
@@ -77,9 +79,15 @@ app.use(cookieParser()); // Parse cookies
 app.get("/", (req, res) => {
   res.status(200).json({
     status: "success",
-    message: "🚀 Malika Casa API is running successfully!",
+    message: "🚀 Nearza API is running successfully!",
   });
 });
+
+
+// =============================================
+// ❌ Global Error Handler (MUST BE LAST)
+// =============================================
+app.use(errorHandler);
 
 // =============================================
 // 📦 Export App
