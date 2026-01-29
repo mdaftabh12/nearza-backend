@@ -4,6 +4,7 @@ const { ApiResponse } = require("../utils/ApiResponse");
 const { otpModel } = require("../models/mongo/otpModel");
 const { generateOTP } = require("../utils/generateOTP");
 const { userModel } = require("../models/sql/userModel");
+const generateToken = require("../utils/jwt");
 
 // =============================================
 // 📩 Send OTP Controller
@@ -11,6 +12,14 @@ const { userModel } = require("../models/sql/userModel");
 
 const sendOtp = asyncHandler(async (req, res) => {
   const { email, phone } = req.body || {};
+
+  // 🛑 Safety check
+  if (email && phone) {
+    throw new ApiError(
+      400,
+      "Either email or phone is required to generate OTP",
+    );
+  }
 
   // Generate OTP
   const otp = generateOTP();
@@ -45,68 +54,111 @@ const sendOtp = asyncHandler(async (req, res) => {
 
 const verifyOtpAndAuthenticate = asyncHandler(async (req, res) => {
   const { email, phone, otp } = req.body || {};
-
   const currentTime = new Date();
 
-  // 🔍 Find latest OTP for email or phone
-  const otpQuery = email ? { email, otp } : { phone, otp };
+  // 🛑 Safety check
+  if (email && phone) {
+    throw new ApiError(
+      400,
+      "Either email or phone is required to generate OTP",
+    );
+  }
 
+  // 🔍 Find latest OTP
+  const otpQuery = email ? { email, otp } : { phone, otp };
   const otpRecord = await otpModel.findOne(otpQuery).sort({ createdAt: -1 });
 
-  // ❌ OTP not found
   if (!otpRecord) {
     throw new ApiError(400, "Invalid OTP. Please try again.");
   }
 
-  // ⏰ OTP expired
   if (otpRecord.expiresAt < currentTime) {
     throw new ApiError(400, "OTP has expired. Please request a new one.");
   }
 
-  // 🧾 Identify user field
+  // 🧾 User lookup condition
   const userWhere = email ? { email } : { phone };
 
-  // 👤 Check if user exists (SQL)
+  // 👤 Check user (SQL)
   let user = await userModel.findOne({ where: userWhere });
+  let isNewUser = false;
 
   // 🆕 Create user if not exists
   if (!user) {
-    user = await userModel.create(userWhere);
+    isNewUser = true;
+
+    user = await userModel.create({
+      fullName: "Guest", // ✅ safe default
+      email: email || "guest@gmail.com",
+      phone: phone || "1234567890",
+    });
   }
 
   // 🔑 Generate auth token
-  const authToken = user.generateAuthToken();
+  const authToken = generateToken(user);
 
-  // 🧹 Delete OTP after successful verification (SECURITY)
+  // 🧹 Delete OTP after verification
   await otpModel.deleteMany({
-    email: email || undefined,
-    phone: phone || undefined,
+    $or: [email ? { email } : null, phone ? { phone } : null].filter(Boolean),
   });
 
-  // 🍪 Set token cookie (optional)
+  // 🍪 Set token cookie
   res.cookie("token", authToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
   });
 
-  return res.status(200).json(
+  return res.json(
     new ApiResponse(
       200,
       {
         token: authToken,
         user,
-        isNewUser: !user.createdAt, // optional flag
+        isNewUser,
       },
       "Authentication successful",
     ),
   );
+
+  // 🔔 NOTE FOR FRONTEND:
+  // If `isNewUser === true`, redirect user to profile completion page.
+  // Otherwise, proceed to dashboard/home.
+});
+
+const userCompleteProfile = asyncHandler(async (req, res) => {
+  // To be implemented
 });
 
 module.exports = { sendOtp, verifyOtpAndAuthenticate };
 
-// const verifyOtpAndRegister
+// const verifyOtpAndAuthenticate
 // otp, email/phone check karega optModel me
 // ab usi email/phone ke sath userModel me check karega
 // agar exist karta hai to login kar dega + token de dega
 // agar exist nahi karta hai to naya user banayega + token de dega + frontend ko /user-profile pe bhej dega
+
+// userCompleteProfile = update user profile
+// authenticated user apna profile complete karega
+// or uska data form me default filled hoga => uske
+// (jaisa ki fullName, email, phone, profileImage, address)
+// aur update ho jayega userModel me
+// phir frontend ko dashboard/home pe bhej dega
+
+// getUserProfile = get user profile
+// authenticated user apna profile dekh sakta hai
+
+// logut = clear cookie token
+
+// This is for admin user management later
+
+// getAllUsers by  with pagination, search, filter
+// status("ACTIVE", "DISABLED", "BLOCKED", "SUSPENDED")
+
+// filter by role ("SELLER", "CUSTOMER")
+
+// updateUserStatus by id (ADMIN only)
+
+// deleteUser by id (ADMIN only)
+
+// 7️⃣ Refresh Token (Future Ready)
