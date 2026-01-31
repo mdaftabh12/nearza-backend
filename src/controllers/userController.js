@@ -4,12 +4,11 @@ const { ApiResponse } = require("../utils/ApiResponse");
 const { otpModel } = require("../models/mongo/otpModel");
 const { generateOTP } = require("../utils/generateOTP");
 const { userModel } = require("../models/sql/userModel");
-const generateToken = require("../utils/jwt");
+const { generateToken } = require("../utils/jwt");
 
 // =============================================
 // 📩 Send OTP Controller
 // =============================================
-
 const sendOtp = asyncHandler(async (req, res) => {
   const { email, phone } = req.body || {};
 
@@ -36,22 +35,23 @@ const sendOtp = asyncHandler(async (req, res) => {
     throw new ApiError(500, "Failed to generate OTP. Please try again.");
   }
 
-  // ✅ Production: Hide OTP in real env
+  // TODO: Send OTP via email/SMS service
+  // await sendEmail(email, otp) or await sendSMS(phone, otp)
+
   const responseData = {
     email,
     phone,
-    otp, // 🔥 Remove/comment this in production
+    otp, // ⚠️ REMOVE IN PRODUCTION - for development only
   };
 
   return res
     .status(200)
-    .json(new ApiResponse(200, responseData, "OTP send successful"));
+    .json(new ApiResponse(200, responseData, "OTP sent successfully"));
 });
 
 // =============================================
 // 🔐 Verify OTP & Authenticate User
 // =============================================
-
 const verifyOtpAndAuthenticate = asyncHandler(async (req, res) => {
   const { email, phone, otp } = req.body || {};
   const currentTime = new Date();
@@ -64,7 +64,7 @@ const verifyOtpAndAuthenticate = asyncHandler(async (req, res) => {
     );
   }
 
-  // 🔍 Find latest OTP
+  // 🔍 Find latest OTP record
   const otpQuery = email ? { email, otp } : { phone, otp };
   const otpRecord = await otpModel.findOne(otpQuery).sort({ createdAt: -1 });
 
@@ -83,14 +83,14 @@ const verifyOtpAndAuthenticate = asyncHandler(async (req, res) => {
   let user = await userModel.findOne({ where: userWhere });
   let isNewUser = false;
 
-  // 🆕 Create user if not exists
   if (!user) {
     isNewUser = true;
 
+    // 🆕 Create new user with provided credentials
     user = await userModel.create({
       fullName: "Guest", // ✅ safe default
-      email: email || "guest@gmail.com",
-      phone: phone || "1234567890",
+      email: email || `guest_${Date.now()}@example.com`,
+      phone: phone || "0000000000",
     });
   }
 
@@ -126,11 +126,202 @@ const verifyOtpAndAuthenticate = asyncHandler(async (req, res) => {
   // Otherwise, proceed to dashboard/home.
 });
 
-const userCompleteProfile = asyncHandler(async (req, res) => {
-  // To be implemented
+// =============================================
+// 👤 Get User Profile Controller
+// =============================================
+const getUserProfile = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+
+  const user = await userModel.findByPk(userId, {
+    attributes: {
+      exclude: ["refreshToken"],
+    },
+    include: [
+      {
+        association: "sellerProfile",
+      },
+    ],
+  });
+
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, user, "Profile fetched successfully"));
 });
 
-module.exports = { sendOtp, verifyOtpAndAuthenticate };
+// =============================================
+// 📝 User Complete Profile Controller
+// =============================================
+// const completeUserProfile = asyncHandler(async (req, res) => {
+//   const userId = req.user.id;
+//   const { fullName, email, phone, profileImage, addresses } = req.body || {};
+
+//   // Find existing user
+//   const user = await userModel.findByPk(userId);
+
+//   if (!user) {
+//     throw new ApiError(404, "User not found");
+//   }
+
+//   // Prepare update data
+//   const updateData = {};
+
+//   if (fullName) updateData.fullName = fullName;
+//   if (email) updateData.email = email;
+//   if (phone) updateData.phone = phone;
+//   if (profileImage) updateData.profileImage = profileImage;
+//   if (addresses && Array.isArray(addresses)) updateData.addresses = addresses;
+
+//   // Update user profile
+//   await user.update(updateData);
+
+//   return res
+//     .status(200)
+//     .json(new ApiResponse(200, user, "Profile completed successfully"));
+// });
+
+// =============================================
+// 🚪 Logout Controller
+// =============================================
+const logout = asyncHandler(async (req, res) => {
+  // Clear the authentication cookie
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  });
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, null, "Logged out successfully"));
+});
+
+// =============================================
+// ADMIN CONTROLLERS
+// =============================================
+
+// =============================================
+// 📋 Get All Users (Admin Only)
+// =============================================
+// const getAllUsers = asyncHandler(async (req, res) => {
+//   const {
+//     page = 1,
+//     limit = 10,
+//     search = "",
+//     role = "",
+//     status = "",
+//   } = req.query;
+
+//   const offset = (page - 1) * limit;
+
+//   // Build where clause
+//   const whereClause = {};
+
+//   // Search by name, email, or phone
+//   if (search) {
+//     whereClause[Op.or] = [
+//       { fullName: { [Op.like]: `%${search}%` } },
+//       { email: { [Op.like]: `%${search}%` } },
+//       { phone: { [Op.like]: `%${search}%` } },
+//     ];
+//   }
+
+//   // Filter by role
+//   if (role) {
+//     whereClause.roles = { [Op.contains]: [role] };
+//   }
+
+//   // Filter by status
+//   if (status) {
+//     whereClause.status = status;
+//   }
+
+//   const { count, rows: users } = await userModel.findAndCountAll({
+//     where: whereClause,
+//     limit: parseInt(limit),
+//     offset: parseInt(offset),
+//     attributes: {
+//       exclude: ["refreshToken"],
+//     },
+//     order: [["createdAt", "DESC"]],
+//   });
+
+//   return res.status(200).json(
+//     new ApiResponse(
+//       200,
+//       {
+//         users,
+//         pagination: {
+//           total: count,
+//           page: parseInt(page),
+//           limit: parseInt(limit),
+//           totalPages: Math.ceil(count / limit),
+//         },
+//       },
+//       "Users fetched successfully",
+//     ),
+//   );
+// });
+
+// =============================================
+// 🔄 Update User Status (Admin Only)
+// =============================================
+// const updateUserStatus = asyncHandler(async (req, res) => {
+//   const { userId } = req.params;
+//   const { status } = req.body;
+
+//   const validStatuses = ["ACTIVE", "DISABLED", "BLOCKED", "SUSPENDED"];
+
+//   if (!validStatuses.includes(status)) {
+//     throw new ApiError(400, "Invalid status value");
+//   }
+
+//   const user = await userModel.findByPk(userId);
+
+//   if (!user) {
+//     throw new ApiError(404, "User not found");
+//   }
+
+//   await user.update({ status });
+
+//   return res
+//     .status(200)
+//     .json(new ApiResponse(200, user, "User status updated successfully"));
+// });
+
+// =============================================
+// 🗑️ Delete User (Admin Only)
+// =============================================
+// const deleteUser = asyncHandler(async (req, res) => {
+//   const { userId } = req.params;
+
+//   const user = await userModel.findByPk(userId);
+
+//   if (!user) {
+//     throw new ApiError(404, "User not found");
+//   }
+
+//   await user.destroy();
+
+//   return res
+//     .status(200)
+//     .json(new ApiResponse(200, null, "User deleted successfully"));
+// });
+
+module.exports = {
+  sendOtp,
+  verifyOtpAndAuthenticate,
+  getUserProfile,
+  // completeUserProfile,
+  // logout,
+  // Admin controllers
+  // getAllUsers,
+  // updateUserStatus,
+  // deleteUser,
+};
 
 // const verifyOtpAndAuthenticate
 // otp, email/phone check karega optModel me
