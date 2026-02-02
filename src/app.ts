@@ -1,28 +1,29 @@
-require("dotenv").config();
-const express = require("express");
-const cors = require("cors");
-const cookieParser = require("cookie-parser");
+import dotenv from "dotenv";
+dotenv.config();
+import express, { Application, Request, Response } from "express";
+import cors from "cors";
+import cookieParser from "cookie-parser";
 
 // =============================================
 // 🧩 Database Connections
 // =============================================
-const connectMongoDB = require("./src/config/mongoose");
-const { connectMySQL, sequelize } = require("./src/config/sequelize");
-const seedAdmin = require("./src/utils/seedAdmin");
+import connectMongoDB from "./config/mongoose";
+import { connectMySQL, sequelize } from "./config/sequelize";
+import seedAdmin from "./utils/seedAdmin";
 
 // =============================================
 // 🧠 Routes Import
 // =============================================
 // SQL-based routes
-const userRoutes = require("./src/routes/userRoutes");
+// import userRoutes from "./src/routes/userRoutes";
 
 // MongoDB-based routes
-// const categoryRoutes = require("./routes/categoryRouter");
+// import userRoutes from "./src/routes/userRoutes";
 
 // =============================================
 // 🚀 Express App Initialization
 // =============================================
-const app = express();
+const app: Application = express();
 
 // =============================================
 // ⚙️ Middleware Configuration
@@ -33,18 +34,18 @@ app.use(
     credentials: true,
   })
 );
-
 app.use(express.json({ limit: "20kb" })); // Parse incoming JSON payloads
 app.use(express.urlencoded({ extended: true, limit: "20kb" })); // Handle URL-encoded data
 app.use(express.static("public")); // Serve static files (e.g., images, uploads)
 app.use(cookieParser()); // Parse cookies
-const errorHandler = require("./src/middlewares/errorHandler");
 
+// Error handler
+// import errorHandler from "./src/middlewares/errorHandler";
 
 // =============================================
 // 🗄️ Database Initialization & Sync
 // =============================================
-(async () => {
+(async (): Promise<void> => {
   try {
     // 🔗 Connect MongoDB
     await connectMongoDB();
@@ -52,17 +53,13 @@ const errorHandler = require("./src/middlewares/errorHandler");
     // 🔗 Connect MySQL
     await connectMySQL();
 
-    // 🔄 Sync all Sequelize Models (safe sync)
-    // await sequelize.sync(); // Use { force: true } ONLY in development
-    // console.log("✅ SQL Models synchronized successfully");
-
+    // 🔄 Sync Sequelize Models (safe sync)
     await sequelize.sync({ alter: true });
     console.log("✔ Tables updated safely without deleting data.");
 
     // 👑 Seed Default Admin User
     await seedAdmin();
-    
-  } catch (error) {
+  } catch (error: any) {
     console.error("❌ Database connection/sync error:", error.message);
   }
 })();
@@ -70,13 +67,13 @@ const errorHandler = require("./src/middlewares/errorHandler");
 // =============================================
 // 🌐 API Routes
 // =============================================
-app.use("/api/users", userRoutes); // User CRUD & Authentication
+// app.use("/api/users", userRoutes); // User CRUD & Authentication
 // app.use("/api/categories", categoryRoutes); // Category management
 
 // =============================================
 // 💚 Health Check Route
 // =============================================
-app.get("/", (req, res) => {
+app.get("/", (req: Request, res: Response) => {
   res.status(200).json({
     status: "success",
     message: "🚀 Nearza API is running successfully!",
@@ -87,9 +84,9 @@ app.get("/", (req, res) => {
 // =============================================
 // ❌ Global Error Handler (MUST BE LAST)
 // =============================================
-app.use(errorHandler);
+// app.use(errorHandler);
 
 // =============================================
 // 📦 Export App
 // =============================================
-module.exports = app;
+export default app;

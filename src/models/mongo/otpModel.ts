@@ -1,6 +1,15 @@
-const mongoose = require("mongoose");
+import mongoose, { Schema, Document, Model } from "mongoose";
 
-const otpSchema = new mongoose.Schema(
+export interface IOtp extends Document {
+  email?: string;
+  phone?: string;
+  otp: string;
+  expiresAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const otpSchema: Schema<IOtp> = new Schema(
   {
     email: {
       type: String,
@@ -22,9 +31,12 @@ const otpSchema = new mongoose.Schema(
       required: [true, "OTP expiry time is required"],
     },
   },
-  { timestamps: true },
+  {
+    timestamps: true,
+  }
 );
 
-module.exports = {
-  otpModel: mongoose.model("OTP", otpSchema),
-};
+const OtpModel: Model<IOtp> =
+  mongoose.models.OTP || mongoose.model<IOtp>("OTP", otpSchema);
+
+export default OtpModel;
