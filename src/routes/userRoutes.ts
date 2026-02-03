@@ -1,42 +1,41 @@
-const express = require("express");
-const router = express.Router();
-const { userAuth, adminAuth } = require("../middlewares/auth");
-const {
+import { Router } from "express";
+// import { userAuth, adminAuth } from "../middlewares/auth";
+
+import {
   sendOtp,
-  verifyOtpAndAuthenticate,
-  getUserProfile,
+  // verifyOtpAndAuthenticate,
+  // getUserProfile,
   // completeUserProfile,
   // logout,
   // getAllUsers,
   // updateUserStatus,
   // deleteUser,
-} = require("../controllers/userController");
+} from "../controllers/userController";
+import { validate } from "../middlewares/zodValidator";
+import { sendOtpSchema } from "../validators/userValidator";
 
-const {
-  sendOtpValidator,
-  verifyOtpAndAuthenticateValidator,
-} = require("../validators/userValidator");
+const router = Router();
 
 // =============================================
 // 🔓 Public Routes (No Authentication Required)
 // =============================================
 
 // Send OTP for login/signup
-router.post("/send-otp", sendOtpValidator, sendOtp);
+router.post("/send-otp", validate(sendOtpSchema), sendOtp);
 
 // Verify OTP and authenticate user
-router.post(
-  "/verify-otp",
-  verifyOtpAndAuthenticateValidator,
-  verifyOtpAndAuthenticate,
-);
+// router.post(
+//   "/verify-otp",
+//   verifyOtpAndAuthenticateValidator,
+//   verifyOtpAndAuthenticate,
+// );
 
 // =============================================
 // 🔒 Protected Routes (Authentication Required)
 // =============================================
 
 // Get current user profile
-router.get("/profile", userAuth, getUserProfile);
+// router.get("/profile", userAuth, getUserProfile);
 
 // Complete user profile (for new users)
 // router.put(
@@ -67,4 +66,4 @@ router.get("/profile", userAuth, getUserProfile);
 // Delete user
 // router.delete("/admin/users/:userId", adminAuth, deleteUser);
 
-module.exports = router;
+export default router;

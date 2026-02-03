@@ -1,7 +1,6 @@
 import {
   Model,
   DataTypes,
-  Optional,
   InferAttributes,
   InferCreationAttributes,
   CreationOptional,
@@ -14,10 +13,9 @@ import { sequelize } from "../../config/sequelize";
 export type UserStatus = "ACTIVE" | "DISABLED" | "BLOCKED" | "SUSPENDED";
 export type UserRole = "ADMIN" | "CUSTOMER" | "SELLER";
 
-
 class User extends Model<
-  InferAttributes<User>,
-  InferCreationAttributes<User>
+  InferAttributes<User, { omit: "createdAt" | "updatedAt" }>,
+  InferCreationAttributes<User, { omit: "createdAt" | "updatedAt" }>
 > {
   declare id: CreationOptional<number>;
   declare fullName: string;
@@ -33,10 +31,10 @@ class User extends Model<
   declare addresses: CreationOptional<unknown[]>;
   declare refreshToken: CreationOptional<string | null>;
 
+  // timestamps
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
 }
-
 
 User.init(
   {
@@ -73,7 +71,7 @@ User.init(
       allowNull: false,
       defaultValue: ["CUSTOMER"],
       validate: {
-        isArray(value: unknown) {
+        isRolesArray(value: unknown) {
           if (!Array.isArray(value)) {
             throw new Error("Roles must be an array");
           }

@@ -36,7 +36,5 @@ const otpSchema: Schema<IOtp> = new Schema(
   }
 );
 
-const OtpModel: Model<IOtp> =
-  mongoose.models.OTP || mongoose.model<IOtp>("OTP", otpSchema);
-
-export default OtpModel;
+const otpModel = mongoose.model<IOtp>("OTP", otpSchema);
+export default otpModel;

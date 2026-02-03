@@ -15,7 +15,7 @@ import seedAdmin from "./utils/seedAdmin";
 // 🧠 Routes Import
 // =============================================
 // SQL-based routes
-// import userRoutes from "./src/routes/userRoutes";
+import userRoutes from "./routes/userRoutes";
 
 // MongoDB-based routes
 // import userRoutes from "./src/routes/userRoutes";
@@ -67,7 +67,7 @@ app.use(cookieParser()); // Parse cookies
 // =============================================
 // 🌐 API Routes
 // =============================================
-// app.use("/api/users", userRoutes); // User CRUD & Authentication
+ app.use("/api/users", userRoutes); // User CRUD & Authentication
 // app.use("/api/categories", categoryRoutes); // Category management
 
 // =============================================

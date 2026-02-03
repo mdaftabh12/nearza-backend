@@ -1,156 +1,159 @@
-const asyncHandler = require("../utils/asyncHandler");
-const { ApiError } = require("../utils/ApiError");
-const { ApiResponse } = require("../utils/ApiResponse");
-const { otpModel } = require("../models/mongo/otpModel");
-const { generateOTP } = require("../utils/generateOTP");
-const { userModel } = require("../models/sql/userModel");
-const { generateToken } = require("../utils/jwt");
+import { Request, Response } from "express";
+import asyncHandler from "../utils/asyncHandler";
+import { ApiError } from "../utils/ApiError";
+import { ApiResponse } from "../utils/ApiResponse";
+import otpModel from "../models/mongo/otpModel";
+import { userModel } from "../models/sql/userModel";
+import { generateOTP } from "../utils/generateOTP";
+import { generateToken } from "../utils/jwt";
 
 // =============================================
 // 📩 Send OTP Controller
 // =============================================
-const sendOtp = asyncHandler(async (req, res) => {
-  const { email, phone } = req.body || {};
+export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
+  const { email, phone }: { email?: string; phone?: string } = req.body || {};
 
   // 🛑 Safety check
+  if (!email && !phone) {
+    throw new ApiError(400, "Email or phone is required to generate OTP");
+  }
+
   if (email && phone) {
-    throw new ApiError(
-      400,
-      "Either email or phone is required to generate OTP",
-    );
+    throw new ApiError(400, "Provide only one: email OR phone");
   }
 
   // Generate OTP
   const otp = generateOTP();
+  const OTP_EXPIRY_TIME = 5 * 60 * 1000; // OTP will expire after 5 minutes
 
   const createOtp = await otpModel.create({
-    email: email || null,
-    phone: phone || null,
+    ...(email && { email }),
+    ...(phone && { phone }),
     otp,
-    expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes expiry
+    expiresAt: new Date(Date.now() + OTP_EXPIRY_TIME),
   });
 
-  // Handle unexpected DB failure
   if (!createOtp) {
     throw new ApiError(500, "Failed to generate OTP. Please try again.");
   }
 
-  // TODO: Send OTP via email/SMS service
-  // await sendEmail(email, otp) or await sendSMS(phone, otp)
+  // TODO: Send OTP via Email/SMS
 
-  const responseData = {
-    email,
-    phone,
-    otp, // ⚠️ REMOVE IN PRODUCTION - for development only
-  };
-
-  return res
-    .status(200)
-    .json(new ApiResponse(200, responseData, "OTP sent successfully"));
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        email,
+        phone,
+        otp, // ⚠️ DEV ONLY
+      },
+      "OTP sent successfully",
+    ),
+  );
 });
 
 // =============================================
 // 🔐 Verify OTP & Authenticate User
 // =============================================
-const verifyOtpAndAuthenticate = asyncHandler(async (req, res) => {
-  const { email, phone, otp } = req.body || {};
-  const currentTime = new Date();
+// const verifyOtpAndAuthenticate = asyncHandler(async (req, res) => {
+//   const { email, phone, otp } = req.body || {};
+//   const currentTime = new Date();
 
-  // 🛑 Safety check
-  if (email && phone) {
-    throw new ApiError(
-      400,
-      "Either email or phone is required to generate OTP",
-    );
-  }
+//   // 🛑 Safety check
+//   if (email && phone) {
+//     throw new ApiError(
+//       400,
+//       "Either email or phone is required to generate OTP",
+//     );
+//   }
 
-  // 🔍 Find latest OTP record
-  const otpQuery = email ? { email, otp } : { phone, otp };
-  const otpRecord = await otpModel.findOne(otpQuery).sort({ createdAt: -1 });
+//   // 🔍 Find latest OTP record
+//   const otpQuery = email ? { email, otp } : { phone, otp };
+//   const otpRecord = await otpModel.findOne(otpQuery).sort({ createdAt: -1 });
 
-  if (!otpRecord) {
-    throw new ApiError(400, "Invalid OTP. Please try again.");
-  }
+//   if (!otpRecord) {
+//     throw new ApiError(400, "Invalid OTP. Please try again.");
+//   }
 
-  if (otpRecord.expiresAt < currentTime) {
-    throw new ApiError(400, "OTP has expired. Please request a new one.");
-  }
+//   if (otpRecord.expiresAt < currentTime) {
+//     throw new ApiError(400, "OTP has expired. Please request a new one.");
+//   }
 
-  // 🧾 User lookup condition
-  const userWhere = email ? { email } : { phone };
+//   // 🧾 User lookup condition
+//   const userWhere = email ? { email } : { phone };
 
-  // 👤 Check user (SQL)
-  let user = await userModel.findOne({ where: userWhere });
-  let isNewUser = false;
+//   // 👤 Check user (SQL)
+//   let user = await userModel.findOne({ where: userWhere });
+//   let isNewUser = false;
 
-  if (!user) {
-    isNewUser = true;
+//   if (!user) {
+//     isNewUser = true;
 
-    // 🆕 Create new user with provided credentials
-    user = await userModel.create({
-      fullName: "Guest", // ✅ safe default
-      email: email || `guest_${Date.now()}@example.com`,
-      phone: phone || "0000000000",
-    });
-  }
+//     // 🆕 Create new user with provided credentials
+//     user = await userModel.create({
+//       fullName: "Guest", // ✅ safe default
+//       email: email || `guest_${Date.now()}@example.com`,
+//       phone: phone || "0000000000",
+//     });
+//   }
 
-  // 🔑 Generate auth token
-  const authToken = generateToken(user);
+//   // 🔑 Generate auth token
+//   const authToken = generateToken(user);
 
-  // 🧹 Delete OTP after verification
-  await otpModel.deleteMany({
-    $or: [email ? { email } : null, phone ? { phone } : null].filter(Boolean),
-  });
+//   // 🧹 Delete OTP after verification
+//   await otpModel.deleteMany({
+//     $or: [email ? { email } : null, phone ? { phone } : null].filter(Boolean),
+//   });
 
-  // 🍪 Set token cookie
-  res.cookie("token", authToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-  });
+//   // 🍪 Set token cookie
+//   res.cookie("token", authToken, {
+//     httpOnly: true,
+//     secure: process.env.NODE_ENV === "production",
+//     sameSite: "strict",
+//   });
 
-  return res.json(
-    new ApiResponse(
-      200,
-      {
-        token: authToken,
-        user,
-        isNewUser,
-      },
-      "Authentication successful",
-    ),
-  );
+//   return res.json(
+//     new ApiResponse(
+//       200,
+//       {
+//         token: authToken,
+//         user,
+//         isNewUser,
+//       },
+//       "Authentication successful",
+//     ),
+//   );
 
-  // 🔔 NOTE FOR FRONTEND:
-  // If `isNewUser === true`, redirect user to profile completion page.
-  // Otherwise, proceed to dashboard/home.
-});
+//   // 🔔 NOTE FOR FRONTEND:
+//   // If `isNewUser === true`, redirect user to profile completion page.
+//   // Otherwise, proceed to dashboard/home.
+// });
 
 // =============================================
 // 👤 Get User Profile Controller
 // =============================================
-const getUserProfile = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
+// const getUserProfile = asyncHandler(async (req, res) => {
+//   const userId = req.user.id;
 
-  const user = await userModel.findByPk(userId, {
-    attributes: {
-      exclude: ["refreshToken"],
-    },
-    include: [
-      {
-        association: "sellerProfile",
-      },
-    ],
-  });
+//   const user = await userModel.findByPk(userId, {
+//     attributes: {
+//       exclude: ["refreshToken"],
+//     },
+//     include: [
+//       {
+//         association: "sellerProfile",
+//       },
+//     ],
+//   });
 
-  if (!user) {
-    throw new ApiError(404, "User not found");
-  }
+//   if (!user) {
+//     throw new ApiError(404, "User not found");
+//   }
 
-  return res
-    .status(200)
-    .json(new ApiResponse(200, user, "Profile fetched successfully"));
-});
+//   return res
+//     .status(200)
+//     .json(new ApiResponse(200, user, "Profile fetched successfully"));
+// });
 
 // =============================================
 // 📝 User Complete Profile Controller
@@ -186,18 +189,18 @@ const getUserProfile = asyncHandler(async (req, res) => {
 // =============================================
 // 🚪 Logout Controller
 // =============================================
-const logout = asyncHandler(async (req, res) => {
-  // Clear the authentication cookie
-  res.clearCookie("token", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-  });
+// const logout = asyncHandler(async (req, res) => {
+//   // Clear the authentication cookie
+//   res.clearCookie("token", {
+//     httpOnly: true,
+//     secure: process.env.NODE_ENV === "production",
+//     sameSite: "strict",
+//   });
 
-  return res
-    .status(200)
-    .json(new ApiResponse(200, null, "Logged out successfully"));
-});
+//   return res
+//     .status(200)
+//     .json(new ApiResponse(200, null, "Logged out successfully"));
+// });
 
 // =============================================
 // ADMIN CONTROLLERS
@@ -311,17 +314,17 @@ const logout = asyncHandler(async (req, res) => {
 //     .json(new ApiResponse(200, null, "User deleted successfully"));
 // });
 
-module.exports = {
-  sendOtp,
-  verifyOtpAndAuthenticate,
-  getUserProfile,
-  // completeUserProfile,
-  // logout,
-  // Admin controllers
-  // getAllUsers,
-  // updateUserStatus,
-  // deleteUser,
-};
+// module.exports = {
+//   sendOtp,
+//   verifyOtpAndAuthenticate,
+//   getUserProfile,
+// completeUserProfile,
+// logout,
+// Admin controllers
+// getAllUsers,
+// updateUserStatus,
+// deleteUser,
+// };
 
 // const verifyOtpAndAuthenticate
 // otp, email/phone check karega optModel me
