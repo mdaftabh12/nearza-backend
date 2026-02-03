@@ -40,7 +40,7 @@ app.use(express.static("public")); // Serve static files (e.g., images, uploads)
 app.use(cookieParser()); // Parse cookies
 
 // Error handler
-// import errorHandler from "./src/middlewares/errorHandler";
+import errorHandler from "./middlewares/errorHandler";
 
 // =============================================
 // 🗄️ Database Initialization & Sync
@@ -84,7 +84,7 @@ app.get("/", (req: Request, res: Response) => {
 // =============================================
 // ❌ Global Error Handler (MUST BE LAST)
 // =============================================
-// app.use(errorHandler);
+app.use(errorHandler);
 
 // =============================================
 // 📦 Export App

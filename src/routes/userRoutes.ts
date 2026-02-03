@@ -1,18 +1,18 @@
 import { Router } from "express";
-// import { userAuth, adminAuth } from "../middlewares/auth";
+import { userAuth, adminAuth } from "../middlewares/auth";
 
 import {
   sendOtp,
-  // verifyOtpAndAuthenticate,
-  // getUserProfile,
+  verifyOtpAndAuthenticate,
+  getUserProfile,
   // completeUserProfile,
-  // logout,
-  // getAllUsers,
+  logout,
+  getAllUsers,
   // updateUserStatus,
   // deleteUser,
 } from "../controllers/userController";
 import { validate } from "../middlewares/zodValidator";
-import { sendOtpSchema } from "../validators/userValidator";
+import { sendOtpSchema, verifyOtpSchema } from "../validators/userValidator";
 
 const router = Router();
 
@@ -24,18 +24,14 @@ const router = Router();
 router.post("/send-otp", validate(sendOtpSchema), sendOtp);
 
 // Verify OTP and authenticate user
-// router.post(
-//   "/verify-otp",
-//   verifyOtpAndAuthenticateValidator,
-//   verifyOtpAndAuthenticate,
-// );
+router.post("/verify-otp", validate(verifyOtpSchema), verifyOtpAndAuthenticate);
 
 // =============================================
 // 🔒 Protected Routes (Authentication Required)
 // =============================================
 
 // Get current user profile
-// router.get("/profile", userAuth, getUserProfile);
+router.get("/user-profile", userAuth, getUserProfile);
 
 // Complete user profile (for new users)
 // router.put(
@@ -46,14 +42,15 @@ router.post("/send-otp", validate(sendOtpSchema), sendOtp);
 // );
 
 // Logout user
-// router.post("/logout", userAuth, logout);
+router.post("/logout", userAuth, logout);
 
 // =============================================
 // 🛡️ Admin Routes (Admin Authentication Required)
 // =============================================
+// router.post("/admin/create", adminAuth, createAdmin);
 
 // Get all users with pagination, search, and filters
-// router.get("/admin/users", adminAuth, getAllUsers);
+router.get("/users", adminAuth, getAllUsers);
 
 // Update user status
 // router.patch(

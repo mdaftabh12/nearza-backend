@@ -1,4 +1,4 @@
-import { ZodSchema } from "zod";
+import { ZodSchema, ZodError } from "zod";
 import { Request, Response, NextFunction } from "express";
 import { ApiError } from "../utils/ApiError";
 
@@ -8,7 +8,16 @@ export const validate =
       schema.parse(req.body);
       next();
     } catch (error: any) {
-      const message = error.errors?.[0]?.message || "Invalid request data";
-      next(new ApiError(400, message));
+      if (error instanceof ZodError) {
+
+        // Get the first error message
+        const message = error.issues[0]?.message || "Invalid request data";
+
+        // Create ApiError with detailed errors
+        const apiError = new ApiError(400, message);
+        next(apiError);
+      } else {
+        next(new ApiError(400, "Invalid request data"));
+      }
     }
-  }; 
+  };

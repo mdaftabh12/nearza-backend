@@ -6,6 +6,7 @@ import otpModel from "../models/mongo/otpModel";
 import { userModel } from "../models/sql/userModel";
 import { generateOTP } from "../utils/generateOTP";
 import { generateToken } from "../utils/jwt";
+import { Op, WhereOptions } from "sequelize";
 
 // =============================================
 // 📩 Send OTP Controller
@@ -41,7 +42,6 @@ export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
 
   return res.status(200).json(
     new ApiResponse(
-      200,
       {
         email,
         phone,
@@ -55,105 +55,113 @@ export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
 // =============================================
 // 🔐 Verify OTP & Authenticate User
 // =============================================
-// const verifyOtpAndAuthenticate = asyncHandler(async (req, res) => {
-//   const { email, phone, otp } = req.body || {};
-//   const currentTime = new Date();
+export const verifyOtpAndAuthenticate = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { email, phone, otp } = req.body || {};
+    const currentTime = new Date();
 
-//   // 🛑 Safety check
-//   if (email && phone) {
-//     throw new ApiError(
-//       400,
-//       "Either email or phone is required to generate OTP",
-//     );
-//   }
+    // 🛑 Safety check
+    if (email && phone) {
+      throw new ApiError(
+        400,
+        "Either email or phone is required to generate OTP",
+      );
+    }
 
-//   // 🔍 Find latest OTP record
-//   const otpQuery = email ? { email, otp } : { phone, otp };
-//   const otpRecord = await otpModel.findOne(otpQuery).sort({ createdAt: -1 });
+    // 🔍 Find latest OTP record
+    const otpQuery = email ? { email, otp } : { phone, otp };
+    const otpRecord = await otpModel.findOne(otpQuery).sort({ createdAt: -1 });
 
-//   if (!otpRecord) {
-//     throw new ApiError(400, "Invalid OTP. Please try again.");
-//   }
+    if (!otpRecord) {
+      throw new ApiError(400, "Invalid OTP. Please try again.");
+    }
 
-//   if (otpRecord.expiresAt < currentTime) {
-//     throw new ApiError(400, "OTP has expired. Please request a new one.");
-//   }
+    if (otpRecord.expiresAt < currentTime) {
+      throw new ApiError(400, "OTP has expired. Please request a new one.");
+    }
 
-//   // 🧾 User lookup condition
-//   const userWhere = email ? { email } : { phone };
+    // 🧾 User lookup condition
+    const userWhere = email ? { email } : { phone };
 
-//   // 👤 Check user (SQL)
-//   let user = await userModel.findOne({ where: userWhere });
-//   let isNewUser = false;
+    // 👤 Check user (SQL)
+    let user = await userModel.findOne({ where: userWhere });
+    let isNewUser = false;
 
-//   if (!user) {
-//     isNewUser = true;
+    if (!user) {
+      isNewUser = true;
 
-//     // 🆕 Create new user with provided credentials
-//     user = await userModel.create({
-//       fullName: "Guest", // ✅ safe default
-//       email: email || `guest_${Date.now()}@example.com`,
-//       phone: phone || "0000000000",
-//     });
-//   }
+      // 🆕 Create new user with provided credentials
+      user = await userModel.create({
+        fullName: "Guest", // ✅ safe default
+        email: email || `guest_${Date.now()}@example.com`,
+        phone: phone || "0000000000",
+      });
+    }
 
-//   // 🔑 Generate auth token
-//   const authToken = generateToken(user);
+    // 🔑 Generate auth token
+    const authToken = generateToken({
+      id: String(user.id),
+      email: user.email,
+    });
 
-//   // 🧹 Delete OTP after verification
-//   await otpModel.deleteMany({
-//     $or: [email ? { email } : null, phone ? { phone } : null].filter(Boolean),
-//   });
+    // 🧹 Delete OTP after verification
+    const deleteQuery: any = {
+      $or: [],
+    };
 
-//   // 🍪 Set token cookie
-//   res.cookie("token", authToken, {
-//     httpOnly: true,
-//     secure: process.env.NODE_ENV === "production",
-//     sameSite: "strict",
-//   });
+    if (email) deleteQuery.$or.push({ email });
+    if (phone) deleteQuery.$or.push({ phone });
 
-//   return res.json(
-//     new ApiResponse(
-//       200,
-//       {
-//         token: authToken,
-//         user,
-//         isNewUser,
-//       },
-//       "Authentication successful",
-//     ),
-//   );
+    await otpModel.deleteMany(deleteQuery);
 
-//   // 🔔 NOTE FOR FRONTEND:
-//   // If `isNewUser === true`, redirect user to profile completion page.
-//   // Otherwise, proceed to dashboard/home.
-// });
+    // 🍪 Set token cookie
+    res.cookie("token", authToken, {
+      httpOnly: true,
+      maxAge: 24 * 60 * 60 * 1000,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+    });
+
+    return res.status(200).json(
+      new ApiResponse(
+        {
+          token: authToken,
+          user,
+          isNewUser,
+        },
+        "Authentication successful",
+      ),
+    );
+
+    // 🔔 NOTE FOR FRONTEND:
+    // If `isNewUser === true`, redirect user to profile completion page.
+    // Otherwise, proceed to dashboard/home.
+  },
+);
 
 // =============================================
 // 👤 Get User Profile Controller
 // =============================================
-// const getUserProfile = asyncHandler(async (req, res) => {
-//   const userId = req.user.id;
+export const getUserProfile = asyncHandler(
+  async (req: Request, res: Response) => {
+    // 🔐 userAuth middleware guarantees req.user
+    const userId = req.user?.id;
 
-//   const user = await userModel.findByPk(userId, {
-//     attributes: {
-//       exclude: ["refreshToken"],
-//     },
-//     include: [
-//       {
-//         association: "sellerProfile",
-//       },
-//     ],
-//   });
+    if (!userId) {
+      throw new ApiError(401, "Unauthorized");
+    }
 
-//   if (!user) {
-//     throw new ApiError(404, "User not found");
-//   }
+    const user = await userModel.findByPk(userId);
 
-//   return res
-//     .status(200)
-//     .json(new ApiResponse(200, user, "Profile fetched successfully"));
-// });
+    if (!user) {
+      throw new ApiError(404, "User not found");
+    }
+
+    return res
+      .status(200)
+      .json(new ApiResponse(user, "Profile fetched successfully"));
+  },
+);
 
 // =============================================
 // 📝 User Complete Profile Controller
@@ -189,18 +197,16 @@ export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
 // =============================================
 // 🚪 Logout Controller
 // =============================================
-// const logout = asyncHandler(async (req, res) => {
-//   // Clear the authentication cookie
-//   res.clearCookie("token", {
-//     httpOnly: true,
-//     secure: process.env.NODE_ENV === "production",
-//     sameSite: "strict",
-//   });
+export const logout = asyncHandler(async (req: Request, res: Response) => {
+  // Clear the authentication cookie
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  });
 
-//   return res
-//     .status(200)
-//     .json(new ApiResponse(200, null, "Logged out successfully"));
-// });
+  return res.status(200).json(new ApiResponse("Logged out successfully"));
+});
 
 // =============================================
 // ADMIN CONTROLLERS
@@ -209,65 +215,66 @@ export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
 // =============================================
 // 📋 Get All Users (Admin Only)
 // =============================================
-// const getAllUsers = asyncHandler(async (req, res) => {
-//   const {
-//     page = 1,
-//     limit = 10,
-//     search = "",
-//     role = "",
-//     status = "",
-//   } = req.query;
+export const getAllUsers = asyncHandler(
+  async (req: Request, res: Response) => {
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 20;
+    const search = (req.query.search as string) || "";
+    const role = (req.query.role as string) || "";
+    const status = (req.query.status as string) || "";
 
-//   const offset = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
-//   // Build where clause
-//   const whereClause = {};
+    // ✅ Type-safe WhereOptions
+    const whereClause: WhereOptions = {};
 
-//   // Search by name, email, or phone
-//   if (search) {
-//     whereClause[Op.or] = [
-//       { fullName: { [Op.like]: `%${search}%` } },
-//       { email: { [Op.like]: `%${search}%` } },
-//       { phone: { [Op.like]: `%${search}%` } },
-//     ];
-//   }
+    // 🔍 Search filter
+    if (search) {
+      Object.assign(whereClause, {
+        [Op.or]: [
+          { fullName: { [Op.like]: `%${search}%` } },
+          { email: { [Op.like]: `%${search}%` } },
+          { phone: { [Op.like]: `%${search}%` } },
+        ],
+      });
+    }
 
-//   // Filter by role
-//   if (role) {
-//     whereClause.roles = { [Op.contains]: [role] };
-//   }
+    // 🎭 Role filter
+    if (role) {
+      whereClause.roles = { [Op.contains]: [role] };
+    }
 
-//   // Filter by status
-//   if (status) {
-//     whereClause.status = status;
-//   }
+    // 🚦 Status filter
+    if (status) {
+      whereClause.status = status;
+    }
 
-//   const { count, rows: users } = await userModel.findAndCountAll({
-//     where: whereClause,
-//     limit: parseInt(limit),
-//     offset: parseInt(offset),
-//     attributes: {
-//       exclude: ["refreshToken"],
-//     },
-//     order: [["createdAt", "DESC"]],
-//   });
+    const { count, rows: users } = await userModel.findAndCountAll({
+      where: whereClause,
+      limit,
+      offset,
+      attributes: {
+        exclude: ["refreshToken"],
+      },
+      order: [["createdAt", "DESC"]],
+    });
 
-//   return res.status(200).json(
-//     new ApiResponse(
-//       200,
-//       {
-//         users,
-//         pagination: {
-//           total: count,
-//           page: parseInt(page),
-//           limit: parseInt(limit),
-//           totalPages: Math.ceil(count / limit),
-//         },
-//       },
-//       "Users fetched successfully",
-//     ),
-//   );
-// });
+    return res.status(200).json(
+      new ApiResponse(
+        {
+          users,
+          pagination: {
+            total: count,
+            page,
+            limit,
+            totalPages: Math.ceil(count / limit),
+          },
+        },
+        "Users fetched successfully",
+      ),
+    );
+  }
+);
 
 // =============================================
 // 🔄 Update User Status (Admin Only)

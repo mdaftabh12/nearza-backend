@@ -7,75 +7,58 @@ export const sendOtpSchema = z
   .object({
     email: z
       .string()
-      .email("Please enter a valid email address")
-      .optional(),
+      .email({ message: "Please enter a valid email address" })
+      .regex(
+        /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|org|in|net|edu|gov|co\.in|co\.uk)$/,
+        "Email must end with valid domain extensions like .com, .org, .in, .net, .edu, .gov",
+      )
+      .optional()
+      .or(z.literal("")),
 
     phone: z
       .string()
-      .regex(/^[0-9]{10}$/, "Phone number must be exactly 10 digits")
-      .optional(),
+      .regex(
+        /^[6-9][0-9]{9}$/,
+        "Phone number must be a valid 10-digit Indian mobile number starting with 6-9",
+      )
+      .optional()
+      .or(z.literal("")),
   })
-  .refine(
-    (data) => data.email || data.phone,
-    {
-      message: "Either email or phone is required to generate OTP",
-      path: ["email"], // error kaha dikhana hai
-    }
-  );
+  .refine((data) => data.email || data.phone, {
+    message: "Either email or phone is required to generate OTP",
+  })
+  .refine((data) => !(data.email && data.phone), {
+    message: "Provide only one: email OR phone, not both",
+  });
 
 // =============================================
 // 🔐 Verify OTP & Authenticate Validator
 // =============================================
 
-// const verifyOtpAndAuthenticateValidator = async (req, res, next) => {
-//   try {
-//     const schema = Joi.object({
-//       email: Joi.string()
-//         .email({ minDomainSegments: 2, tlds: { allow: ["com", "in"] } })
-//         .messages({
-//           "string.email": "Please enter a valid email address",
-//         })
-//         .optional(),
+export const verifyOtpSchema = z
+  .object({
+    email: z
+      .string()
+      .email("Please enter a valid email address")
+      .optional()
+      .transform((v) => (v === "" ? undefined : v)),
 
-//       phone: Joi.string()
-//         .pattern(/^[0-9]{10}$/)
-//         .messages({
-//           "string.pattern.base": "Phone number must be exactly 10 digits",
-//         })
-//         .optional(),
+    phone: z
+      .string()
+      .regex(/^[6-9][0-9]{9}$/, "Phone number must be 10 digits")
+      .optional()
+      .transform((v) => (v === "" ? undefined : v)),
 
-//       otp: Joi.string()
-//         .length(6)
-//         .pattern(/^[0-9]{6}$/)
-//         .required()
-//         .messages({
-//           "any.required": "OTP is required",
-//           "string.length": "OTP must be exactly 6 digits",
-//           "string.pattern.base": "OTP must contain only numbers",
-//         }),
-//     });
-
-//     await schema.validateAsync(req.body || {}, { abortEarly: true });
-
-//     if (!req.body || (!req.body.email && !req.body.phone)) {
-//       throw new ApiError(
-//         400,
-//         "Either email or phone is required to verify OTP",
-//       );
-//     }
-
-//     next();
-//   } catch (err) {
-//     next(
-//       err instanceof ApiError
-//         ? err
-//         : new ApiError(400, err.details?.[0]?.message),
-//     );
-//   }
-// };
+    otp: z.string().regex(/^[0-9]{6}$/, "OTP must be exactly 6 digits"),
+  })
+  .refine((data) => data.email || data.phone, {
+    message: "Either email or phone is required to verify OTP",
+  })
+  .refine((data) => !(data.email && data.phone), {
+    message: "Provide only one: email OR phone",
+  });
 
 // module.exports = { sendOtpValidator, verifyOtpAndAuthenticateValidator };
-
 
 // =============================================
 // 📩 Send OTP Request Validator
