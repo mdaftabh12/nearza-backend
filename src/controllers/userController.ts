@@ -3,7 +3,7 @@ import asyncHandler from "../utils/asyncHandler";
 import { ApiError } from "../utils/ApiError";
 import { ApiResponse } from "../utils/ApiResponse";
 import otpModel from "../models/mongo/otpModel";
-import { userModel } from "../models/sql/userModel";
+import { userModel, UserStatus } from "../models/sql/userModel";
 import { generateOTP } from "../utils/generateOTP";
 import { generateToken } from "../utils/jwt";
 import { Op, WhereOptions } from "sequelize";
@@ -215,123 +215,87 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
 // =============================================
 // 📋 Get All Users (Admin Only)
 // =============================================
-export const getAllUsers = asyncHandler(
-  async (req: Request, res: Response) => {
-    const page = Number(req.query.page) || 1;
-    const limit = Number(req.query.limit) || 20;
-    const search = (req.query.search as string) || "";
-    const role = (req.query.role as string) || "";
-    const status = (req.query.status as string) || "";
+export const getAllUsers = asyncHandler(async (req: Request, res: Response) => {
+  const page = Number(req.query.page) || 1;
+  const limit = Number(req.query.limit) || 20;
+  const search = (req.query.search as string) || "";
+  const role = (req.query.role as string) || "";
+  const status = (req.query.status as string) || "";
 
-    const offset = (page - 1) * limit;
+  const offset = (page - 1) * limit;
 
-    // ✅ Type-safe WhereOptions
-    const whereClause: WhereOptions = {};
+  // ✅ Type-safe WhereOptions
+  const whereClause: WhereOptions = {};
 
-    // 🔍 Search filter
-    if (search) {
-      Object.assign(whereClause, {
-        [Op.or]: [
-          { fullName: { [Op.like]: `%${search}%` } },
-          { email: { [Op.like]: `%${search}%` } },
-          { phone: { [Op.like]: `%${search}%` } },
-        ],
-      });
-    }
-
-    // 🎭 Role filter
-    if (role) {
-      whereClause.roles = { [Op.contains]: [role] };
-    }
-
-    // 🚦 Status filter
-    if (status) {
-      whereClause.status = status;
-    }
-
-    const { count, rows: users } = await userModel.findAndCountAll({
-      where: whereClause,
-      limit,
-      offset,
-      attributes: {
-        exclude: ["refreshToken"],
-      },
-      order: [["createdAt", "DESC"]],
+  // 🔍 Search filter
+  if (search) {
+    Object.assign(whereClause, {
+      [Op.or]: [
+        { fullName: { [Op.like]: `%${search}%` } },
+        { email: { [Op.like]: `%${search}%` } },
+        { phone: { [Op.like]: `%${search}%` } },
+      ],
     });
-
-    return res.status(200).json(
-      new ApiResponse(
-        {
-          users,
-          pagination: {
-            total: count,
-            page,
-            limit,
-            totalPages: Math.ceil(count / limit),
-          },
-        },
-        "Users fetched successfully",
-      ),
-    );
   }
-);
+
+  // 🎭 Role filter
+  if (role) {
+    whereClause.roles = { [Op.contains]: [role] };
+  }
+
+  // 🚦 Status filter
+  if (status) {
+    whereClause.status = status;
+  }
+
+  const { count, rows: users } = await userModel.findAndCountAll({
+    where: whereClause,
+    limit,
+    offset,
+    attributes: {
+      exclude: ["refreshToken"],
+    },
+    order: [["createdAt", "DESC"]],
+  });
+
+  return res.status(200).json(
+    new ApiResponse(
+      {
+        users,
+        pagination: {
+          total: count,
+          page,
+          limit,
+          totalPages: Math.ceil(count / limit),
+        },
+      },
+      "Users fetched successfully",
+    ),
+  );
+});
 
 // =============================================
 // 🔄 Update User Status (Admin Only)
 // =============================================
-// const updateUserStatus = asyncHandler(async (req, res) => {
-//   const { userId } = req.params;
-//   const { status } = req.body;
+export const updateAccountStatus = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = Number(req.params.userId);
+    const { status } = req.body as { status: UserStatus };
 
-//   const validStatuses = ["ACTIVE", "DISABLED", "BLOCKED", "SUSPENDED"];
+    const user = await userModel.findByPk(userId);
 
-//   if (!validStatuses.includes(status)) {
-//     throw new ApiError(400, "Invalid status value");
-//   }
+    if (!user) {
+      throw new ApiError(404, "User not found");
+    }
 
-//   const user = await userModel.findByPk(userId);
+    await user.update({ status });
 
-//   if (!user) {
-//     throw new ApiError(404, "User not found");
-//   }
+    return res
+      .status(200)
+      .json(new ApiResponse(user, "User status updated successfully"));
+  }
+);
 
-//   await user.update({ status });
-
-//   return res
-//     .status(200)
-//     .json(new ApiResponse(200, user, "User status updated successfully"));
-// });
-
-// =============================================
-// 🗑️ Delete User (Admin Only)
-// =============================================
-// const deleteUser = asyncHandler(async (req, res) => {
-//   const { userId } = req.params;
-
-//   const user = await userModel.findByPk(userId);
-
-//   if (!user) {
-//     throw new ApiError(404, "User not found");
-//   }
-
-//   await user.destroy();
-
-//   return res
-//     .status(200)
-//     .json(new ApiResponse(200, null, "User deleted successfully"));
-// });
-
-// module.exports = {
-//   sendOtp,
-//   verifyOtpAndAuthenticate,
-//   getUserProfile,
-// completeUserProfile,
-// logout,
-// Admin controllers
-// getAllUsers,
-// updateUserStatus,
-// deleteUser,
-// };
 
 // const verifyOtpAndAuthenticate
 // otp, email/phone check karega optModel me

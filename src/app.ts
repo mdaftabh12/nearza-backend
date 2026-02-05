@@ -32,7 +32,7 @@ app.use(
   cors({
     origin: process.env.CORS_ORIGIN || "*", // Allow CORS from frontend
     credentials: true,
-  })
+  }),
 );
 app.use(express.json({ limit: "20kb" })); // Parse incoming JSON payloads
 app.use(express.urlencoded({ extended: true, limit: "20kb" })); // Handle URL-encoded data
@@ -54,8 +54,8 @@ import errorHandler from "./middlewares/errorHandler";
     await connectMySQL();
 
     // 🔄 Sync Sequelize Models (safe sync)
-    await sequelize.sync({ alter: true });
-    console.log("✔ Tables updated safely without deleting data.");
+    await sequelize.sync();
+    console.log("✔ Tables synced successfully");
 
     // 👑 Seed Default Admin User
     await seedAdmin();
@@ -67,7 +67,7 @@ import errorHandler from "./middlewares/errorHandler";
 // =============================================
 // 🌐 API Routes
 // =============================================
- app.use("/api/users", userRoutes); // User CRUD & Authentication
+app.use("/api/users", userRoutes); // User CRUD & Authentication
 // app.use("/api/categories", categoryRoutes); // Category management
 
 // =============================================
@@ -79,7 +79,6 @@ app.get("/", (req: Request, res: Response) => {
     message: "🚀 Nearza API is running successfully!",
   });
 });
-
 
 // =============================================
 // ❌ Global Error Handler (MUST BE LAST)

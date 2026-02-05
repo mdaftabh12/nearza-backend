@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+enum UserStatusEnum {
+  ACTIVE = "ACTIVE",
+  DISABLED = "DISABLED",
+  BLOCKED = "BLOCKED",
+  SUSPENDED = "SUSPENDED",
+}
+
 // =============================================
 // 📩 Send OTP Request Validator
 // =============================================
@@ -57,123 +64,6 @@ export const verifyOtpSchema = z
   .refine((data) => !(data.email && data.phone), {
     message: "Provide only one: email OR phone",
   });
-
-// module.exports = { sendOtpValidator, verifyOtpAndAuthenticateValidator };
-
-// =============================================
-// 📩 Send OTP Request Validator
-// =============================================
-// const sendOtpValidator = async (req, res, next) => {
-//   try {
-//     const schema = Joi.object({
-//       email: Joi.string()
-//         .email({ minDomainSegments: 2, tlds: { allow: ["com", "in"] } })
-//         .messages({
-//           "string.email": "Please enter a valid email address",
-//           "string.empty": "Email cannot be empty",
-//         })
-//         .optional(),
-
-//       phone: Joi.string()
-//         .pattern(/^[0-9]{10}$/)
-//         .messages({
-//           "string.pattern.base": "Phone number must be exactly 10 digits",
-//           "string.empty": "Phone number cannot be empty",
-//         })
-//         .optional(),
-//     });
-
-//     // Validate schema
-//     await schema.validateAsync(req.body || {}, { abortEarly: true });
-
-//     // Custom validation: Either email OR phone required
-//     if (!req.body || (!req.body.email && !req.body.phone)) {
-//       throw new ApiError(
-//         400,
-//         "Either email or phone is required to generate OTP"
-//       );
-//     }
-
-//     // Custom validation: Both email AND phone not allowed
-//     if (req.body.email && req.body.phone) {
-//       throw new ApiError(
-//         400,
-//         "Please provide either email or phone, not both"
-//       );
-//     }
-
-//     next();
-//   } catch (err) {
-//     next(
-//       err instanceof ApiError
-//         ? err
-//         : new ApiError(400, err.details?.[0]?.message)
-//     );
-//   }
-// };
-
-// =============================================
-// 🔐 Verify OTP & Authenticate Validator
-// =============================================
-// const verifyOtpAndAuthenticateValidator = async (req, res, next) => {
-//   try {
-//     const schema = Joi.object({
-//       email: Joi.string()
-//         .email({ minDomainSegments: 2, tlds: { allow: ["com", "in"] } })
-//         .messages({
-//           "string.email": "Please enter a valid email address",
-//           "string.empty": "Email cannot be empty",
-//         })
-//         .optional(),
-
-//       phone: Joi.string()
-//         .pattern(/^[0-9]{10}$/)
-//         .messages({
-//           "string.pattern.base": "Phone number must be exactly 10 digits",
-//           "string.empty": "Phone number cannot be empty",
-//         })
-//         .optional(),
-
-//       otp: Joi.string()
-//         .length(6)
-//         .pattern(/^[0-9]{6}$/)
-//         .required()
-//         .messages({
-//           "any.required": "OTP is required",
-//           "string.empty": "OTP cannot be empty",
-//           "string.length": "OTP must be exactly 6 digits",
-//           "string.pattern.base": "OTP must contain only numbers",
-//         }),
-//     });
-
-//     // Validate schema
-//     await schema.validateAsync(req.body || {}, { abortEarly: true });
-
-//     // Custom validation: Either email OR phone required
-//     if (!req.body || (!req.body.email && !req.body.phone)) {
-//       throw new ApiError(
-//         400,
-//         "Either email or phone is required to verify OTP"
-//       );
-//     }
-
-//     // Custom validation: Both email AND phone not allowed
-//     if (req.body.email && req.body.phone) {
-//       throw new ApiError(
-//         400,
-//         "Please provide either email or phone, not both"
-//       );
-//     }
-
-//     next();
-//   } catch (err) {
-//     next(
-//       err instanceof ApiError
-//         ? err
-//         : new ApiError(400, err.details?.[0]?.message)
-//     );
-//   }
-// };
 
 // =============================================
 // 📝 Complete User Profile Validator
@@ -313,49 +203,24 @@ export const verifyOtpSchema = z
 // };
 
 // =============================================
-// 🔄 Update User Status Validator (Admin)
+// 🔄 Update User Account Status Validator (Admin)
 // =============================================
-// const updateUserStatusValidator = async (req, res, next) => {
-//   try {
-//     // Validate params
-//     const paramsSchema = Joi.object({
-//       userId: Joi.number()
-//         .integer()
-//         .positive()
-//         .required()
-//         .messages({
-//           "any.required": "User ID is required",
-//           "number.base": "User ID must be a number",
-//           "number.integer": "User ID must be an integer",
-//           "number.positive": "User ID must be a positive number",
-//         }),
-//     });
+export const updateAccountStatusSchema = z.object({
+  params: z.object({
+    userId: z.coerce
+      .number()
+      .int()
+      .positive("User id must be a valid positive number"),
+  }),
 
-//     await paramsSchema.validateAsync(req.params, { abortEarly: true });
-
-//     // Validate body
-//     const bodySchema = Joi.object({
-//       status: Joi.string()
-//         .valid("ACTIVE", "DISABLED", "BLOCKED", "SUSPENDED")
-//         .required()
-//         .messages({
-//           "any.required": "Status is required",
-//           "any.only": "Status must be ACTIVE, DISABLED, BLOCKED, or SUSPENDED",
-//           "string.empty": "Status cannot be empty",
-//         }),
-//     });
-
-//     await bodySchema.validateAsync(req.body, { abortEarly: true });
-
-//     next();
-//   } catch (err) {
-//     next(
-//       err instanceof ApiError
-//         ? err
-//         : new ApiError(400, err.details?.[0]?.message)
-//     );
-//   }
-// };
+  body: z.object({
+    status: z
+      .nativeEnum(UserStatusEnum)
+      .refine((val) => !!val, {
+        message: "Account status is required",
+      }),
+  }),
+});
 
 // =============================================
 // 🗑️ Delete User Validator (Admin)

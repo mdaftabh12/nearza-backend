@@ -8,7 +8,7 @@ import {
   // completeUserProfile,
   logout,
   getAllUsers,
-  // updateUserStatus,
+  updateAccountStatus,
   // deleteUser,
 } from "../controllers/userController";
 import { validate } from "../middlewares/zodValidator";
@@ -53,12 +53,7 @@ router.post("/logout", userAuth, logout);
 router.get("/users", adminAuth, getAllUsers);
 
 // Update user status
-// router.patch(
-//   "/admin/users/:userId/status",
-//   adminAuth,
-//   updateUserStatusValidator,
-//   updateUserStatus,
-// );
+router.put("/account-status/:userId", adminAuth, updateAccountStatus);
 
 // Delete user
 // router.delete("/admin/users/:userId", adminAuth, deleteUser);
