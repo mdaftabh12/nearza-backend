@@ -93,7 +93,7 @@ export const verifyOtpAndAuthenticate = asyncHandler(
       // 🆕 Create new user with provided credentials
       user = await userModel.create({
         fullName: "Guest", // ✅ safe default
-        email: email || `guest_${Date.now()}@example.com`,
+        email: email || `guest${Date.now()}@example.com`,
         phone: phone || "0000000000",
       });
     }
