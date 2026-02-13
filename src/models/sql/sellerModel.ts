@@ -58,7 +58,7 @@ Seller.init(
       autoIncrement: true,
       primaryKey: true,
     },
-
+  
     userId: {
       type: DataTypes.INTEGER,
       allowNull: false,
@@ -123,6 +123,5 @@ Seller.init(
   },
 );
 
-// ✅ Export Style (as you asked)
 export const sellerModel = Seller;
 export default Seller;
