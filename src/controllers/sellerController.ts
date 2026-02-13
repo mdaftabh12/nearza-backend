@@ -101,5 +101,3 @@ export const updateSellerStatus = asyncHandler(
 // 7. Delete seller profile
         // User can delete their seller profile (soft delete, status set to "DELETED")
         // Admin can delete any seller profile (soft delete, status set to "DELETED")
-
-

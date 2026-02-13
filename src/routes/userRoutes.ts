@@ -1,18 +1,24 @@
 import { Router } from "express";
 import { userAuth, adminAuth } from "../middlewares/auth";
-
+import { validate } from "../middlewares/zodValidator";
+import { upload } from "../middlewares/multer";
 import {
   sendOtp,
   verifyOtpAndAuthenticate,
   getUserProfile,
-  // completeUserProfile,
+  completeUserProfile,
   logout,
   getAllUsers,
   updateAccountStatus,
-  // deleteUser,
+  getUserById,
 } from "../controllers/userController";
-import { validate } from "../middlewares/zodValidator";
-import { sendOtpSchema, verifyOtpSchema } from "../validators/userValidator";
+import {
+  sendOtpSchema,
+  verifyOtpSchema,
+  completeUserProfileSchema,
+  getAllUsersSchema,
+  updateAccountStatusSchema,
+} from "../validators/userValidator";
 
 const router = Router();
 
@@ -34,12 +40,13 @@ router.post("/verify-otp", validate(verifyOtpSchema), verifyOtpAndAuthenticate);
 router.get("/user-profile", userAuth, getUserProfile);
 
 // Complete user profile (for new users)
-// router.put(
-//   "/complete-profile",
-//   userAuth,
-//   completeUserProfileValidator,
-//   completeUserProfile,
-// );
+router.put(
+  "/complete-profile",
+  userAuth,
+  upload.single("profileImage"),
+  validate(completeUserProfileSchema),
+  completeUserProfile,
+);
 
 // Logout user
 router.post("/logout", userAuth, logout);
@@ -47,15 +54,19 @@ router.post("/logout", userAuth, logout);
 // =============================================
 // 🛡️ Admin Routes (Admin Authentication Required)
 // =============================================
-// router.post("/admin/create", adminAuth, createAdmin);
 
 // Get all users with pagination, search, and filters
-router.get("/users", adminAuth, getAllUsers);
+router.get("/users", adminAuth, validate(getAllUsersSchema), getAllUsers);
 
 // Update user status
-router.put("/account-status/:userId", adminAuth, updateAccountStatus);
+router.put(
+  "/account-status/:userId",
+  adminAuth,
+  validate(updateAccountStatusSchema),
+  updateAccountStatus,
+);
 
-// Delete user
-// router.delete("/admin/users/:userId", adminAuth, deleteUser);
+// Get single user by ID
+router.get("/single-user/:userId", adminAuth, getUserById);
 
 export default router;

@@ -7,6 +7,10 @@ import { userModel, UserStatus } from "../models/sql/userModel";
 import { generateOTP } from "../utils/generateOTP";
 import { generateToken } from "../utils/jwt";
 import { Op, WhereOptions } from "sequelize";
+import {
+  uploadOnCloudinary,
+  deleteFromCloudinary,
+} from "../services/cloudinary";
 
 // =============================================
 // 📩 Send OTP Controller
@@ -109,10 +113,10 @@ export const verifyOtpAndAuthenticate = asyncHandler(
       $or: [],
     };
 
-    if (email) deleteQuery.$or.push({ email });
-    if (phone) deleteQuery.$or.push({ phone });
+    // if (email) deleteQuery.$or.push({ email });
+    // if (phone) deleteQuery.$or.push({ phone });
 
-    await otpModel.deleteMany(deleteQuery);
+    await otpModel.deleteMany(email ? { email } : { phone });
 
     // 🍪 Set token cookie
     res.cookie("token", authToken, {
@@ -166,33 +170,60 @@ export const getUserProfile = asyncHandler(
 // =============================================
 // 📝 User Complete Profile Controller
 // =============================================
-// const completeUserProfile = asyncHandler(async (req, res) => {
-//   const userId = req.user.id;
-//   const { fullName, email, phone, profileImage, addresses } = req.body || {};
+export const completeUserProfile = asyncHandler(
+  async (req: Request & { file?: any; user?: any }, res: Response) => {
+    const userId = req.user?.id;
 
-//   // Find existing user
-//   const user = await userModel.findByPk(userId);
+    if (!userId) {
+      throw new ApiError(401, "Unauthorized");
+    }
 
-//   if (!user) {
-//     throw new ApiError(404, "User not found");
-//   }
+    const user = await userModel.findByPk(userId);
 
-//   // Prepare update data
-//   const updateData = {};
+    if (!user) {
+      throw new ApiError(404, "User not found");
+    }
 
-//   if (fullName) updateData.fullName = fullName;
-//   if (email) updateData.email = email;
-//   if (phone) updateData.phone = phone;
-//   if (profileImage) updateData.profileImage = profileImage;
-//   if (addresses && Array.isArray(addresses)) updateData.addresses = addresses;
+    const { fullName, email, phone, addresses } = req.body || {};
+    const updateData: any = {};
 
-//   // Update user profile
-//   await user.update(updateData);
+    // ========= Image Handling =========
+    if (req?.file) {
+      // delete old image
+      if (user?.profileImage) {
+        await deleteFromCloudinary(user.profileImage);
+      }
 
-//   return res
-//     .status(200)
-//     .json(new ApiResponse(200, user, "Profile completed successfully"));
-// });
+      const uploadedImage = await uploadOnCloudinary(req?.file?.path);
+
+      if (!uploadedImage?.secure_url) {
+        throw new ApiError(500, "Failed to upload profile image");
+      }
+
+      updateData.profileImage = uploadedImage.secure_url;
+    }
+
+    // ========= Other Fields =========
+    if (fullName) updateData.fullName = fullName;
+    if (email) updateData.email = email;
+    if (phone) updateData.phone = phone;
+    if (addresses) updateData.addresses = addresses;
+
+    // ========= Ensure at least one field =========
+    if (Object.keys(updateData).length === 0) {
+      throw new ApiError(
+        400,
+        "At least one field is required to update profile",
+      );
+    }
+
+    await user.update(updateData);
+
+    return res
+      .status(200)
+      .json(new ApiResponse(user, "Profile updated successfully"));
+  },
+);
 
 // =============================================
 // 🚪 Logout Controller
@@ -216,52 +247,38 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
 // 📋 Get All Users (Admin Only)
 // =============================================
 export const getAllUsers = asyncHandler(async (req: Request, res: Response) => {
-  const page = Number(req.query.page) || 1;
-  const limit = Number(req.query.limit) || 20;
-  const search = (req.query.search as string) || "";
-  const role = (req.query.role as string) || "";
-  const status = (req.query.status as string) || "";
+  const page = Math.max(Number(req.query.page) || 1, 1);
+  const limit = Math.min(Number(req.query.limit) || 20, 100);
+  const search = req.query.search as string | undefined;
+  const role = req.query.role as string | undefined;
+  const status = req.query.status as UserStatus | undefined;
 
   const offset = (page - 1) * limit;
 
-  // ✅ Type-safe WhereOptions
-  const whereClause: WhereOptions = {};
-
-  // 🔍 Search filter
-  if (search) {
-    Object.assign(whereClause, {
+  const whereClause: WhereOptions<any> = {
+    ...(search && {
       [Op.or]: [
-        { fullName: { [Op.like]: `%${search}%` } },
-        { email: { [Op.like]: `%${search}%` } },
-        { phone: { [Op.like]: `%${search}%` } },
+        { fullName: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } },
+        { phone: { [Op.iLike]: `%${search}%` } },
       ],
-    });
-  }
+    }),
+    ...(role && { roles: { [Op.contains]: [role] } }),
+    ...(status && { status }),
+  };
 
-  // 🎭 Role filter
-  if (role) {
-    whereClause.roles = { [Op.contains]: [role] };
-  }
-
-  // 🚦 Status filter
-  if (status) {
-    whereClause.status = status;
-  }
-
-  const { count, rows: users } = await userModel.findAndCountAll({
+  const { count, rows } = await userModel.findAndCountAll({
     where: whereClause,
     limit,
     offset,
-    attributes: {
-      exclude: ["refreshToken"],
-    },
+    attributes: { exclude: ["refreshToken"] },
     order: [["createdAt", "DESC"]],
   });
 
   return res.status(200).json(
     new ApiResponse(
       {
-        users,
+        users: rows,
         pagination: {
           total: count,
           page,
@@ -293,37 +310,21 @@ export const updateAccountStatus = asyncHandler(
     return res
       .status(200)
       .json(new ApiResponse(user, "User status updated successfully"));
-  }
+  },
 );
 
+// =============================================
+// 👤 Get Single User (Admin View)
+// =============================================
+export const getUserById = asyncHandler(async (req: Request, res: Response) => {
+  const userId = Number(req.params.userId);
 
-// const verifyOtpAndAuthenticate
-// otp, email/phone check karega optModel me
-// ab usi email/phone ke sath userModel me check karega
-// agar exist karta hai to login kar dega + token de dega
-// agar exist nahi karta hai to naya user banayega + token de dega + frontend ko /user-profile pe bhej dega
+  const user = await userModel.findByPk(userId);
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
 
-// userCompleteProfile = update user profile
-// authenticated user apna profile complete karega
-// or uska data form me default filled hoga => uske
-// (jaisa ki fullName, email, phone, profileImage, address)
-// aur update ho jayega userModel me
-// phir frontend ko dashboard/home pe bhej dega
-
-// getUserProfile = get user profile
-// authenticated user apna profile dekh sakta hai
-
-// logut = clear cookie token
-
-// This is for admin user management later
-
-// getAllUsers by  with pagination, search, filter
-// status("ACTIVE", "DISABLED", "BLOCKED", "SUSPENDED")
-
-// filter by role ("SELLER", "CUSTOMER")
-
-// updateUserStatus by id (ADMIN only)
-
-// deleteUser by id (ADMIN only)
-
-// 7️⃣ Refresh Token (Future Ready)
+  return res
+    .status(200)
+    .json(new ApiResponse(user, "User details fetched successfully"));
+});

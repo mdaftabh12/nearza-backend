@@ -46,7 +46,11 @@ export const verifyOtpSchema = z
   .object({
     email: z
       .string()
-      .email("Please enter a valid email address")
+      .email({ message: "Please enter a valid email address" })
+      .regex(
+        /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|org|in|net|edu|gov|co\.in|co\.uk)$/,
+        "Email must end with valid domain extensions like .com, .org, .in, .net, .edu, .gov",
+      )
       .optional()
       .transform((v) => (v === "" ? undefined : v)),
 
@@ -68,139 +72,50 @@ export const verifyOtpSchema = z
 // =============================================
 // 📝 Complete User Profile Validator
 // =============================================
-// const completeUserProfileValidator = async (req, res, next) => {
-//   try {
-//     const schema = Joi.object({
-//       fullName: Joi.string()
-//         .min(2)
-//         .max(100)
-//         .trim()
-//         .messages({
-//           "string.min": "Full name must be at least 2 characters long",
-//           "string.max": "Full name cannot exceed 100 characters",
-//           "string.empty": "Full name cannot be empty",
-//         })
-//         .optional(),
+export const completeUserProfileSchema = z.object({
+  body: z
+    .object({
+      fullName: z
+        .string()
+        .min(2, "Full name must be at least 2 characters")
+        .max(50, "Full name cannot exceed 50 characters")
+        .optional(),
 
-//       email: Joi.string()
-//         .email({ minDomainSegments: 2, tlds: { allow: ["com", "in"] } })
-//         .messages({
-//           "string.email": "Please enter a valid email address",
-//           "string.empty": "Email cannot be empty",
-//         })
-//         .optional(),
+      email: z
+        .string()
+        .email({ message: "Please enter a valid email address" })
+        .regex(
+          /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|org|in|net|edu|gov|co\.in|co\.uk)$/,
+          "Email must end with valid domain extensions like .com, .org, .in, .net, .edu, .gov",
+        )
+        .optional(),
 
-//       phone: Joi.string()
-//         .pattern(/^[0-9]{10}$/)
-//         .messages({
-//           "string.pattern.base": "Phone number must be exactly 10 digits",
-//           "string.empty": "Phone number cannot be empty",
-//         })
-//         .optional(),
+      phone: z
+        .string()
+        .regex(/^[6-9][0-9]{9}$/, "Invalid Indian phone number")
+        .optional(),
 
-//       profileImage: Joi.string()
-//         .uri()
-//         .messages({
-//           "string.uri": "Profile image must be a valid URL",
-//           "string.empty": "Profile image URL cannot be empty",
-//         })
-//         .optional(),
-
-//       addresses: Joi.array()
-//         .items(
-//           Joi.object({
-//             type: Joi.string()
-//               .valid("home", "work", "other")
-//               .messages({
-//                 "any.only": "Address type must be home, work, or other",
-//               })
-//               .optional(),
-
-//             street: Joi.string()
-//               .min(5)
-//               .max(200)
-//               .trim()
-//               .messages({
-//                 "string.min": "Street address must be at least 5 characters",
-//                 "string.max": "Street address cannot exceed 200 characters",
-//                 "string.empty": "Street address cannot be empty",
-//               })
-//               .optional(),
-
-//             city: Joi.string()
-//               .min(2)
-//               .max(50)
-//               .trim()
-//               .messages({
-//                 "string.min": "City must be at least 2 characters",
-//                 "string.max": "City cannot exceed 50 characters",
-//                 "string.empty": "City cannot be empty",
-//               })
-//               .optional(),
-
-//             state: Joi.string()
-//               .min(2)
-//               .max(50)
-//               .trim()
-//               .messages({
-//                 "string.min": "State must be at least 2 characters",
-//                 "string.max": "State cannot exceed 50 characters",
-//                 "string.empty": "State cannot be empty",
-//               })
-//               .optional(),
-
-//             pincode: Joi.string()
-//               .pattern(/^[0-9]{6}$/)
-//               .messages({
-//                 "string.pattern.base": "Pincode must be exactly 6 digits",
-//                 "string.empty": "Pincode cannot be empty",
-//               })
-//               .optional(),
-
-//             country: Joi.string()
-//               .min(2)
-//               .max(50)
-//               .trim()
-//               .messages({
-//                 "string.min": "Country must be at least 2 characters",
-//                 "string.max": "Country cannot exceed 50 characters",
-//               })
-//               .optional(),
-
-//             isDefault: Joi.boolean()
-//               .messages({
-//                 "boolean.base": "isDefault must be true or false",
-//               })
-//               .optional(),
-//           })
-//         )
-//         .messages({
-//           "array.base": "Addresses must be an array",
-//         })
-//         .optional(),
-//     });
-
-//     // Validate schema
-//     await schema.validateAsync(req.body || {}, { abortEarly: true });
-
-//     // Custom validation: At least one field should be provided
-//     const hasData = Object.keys(req.body || {}).length > 0;
-//     if (!hasData) {
-//       throw new ApiError(
-//         400,
-//         "At least one field is required to update profile"
-//       );
-//     }
-
-//     next();
-//   } catch (err) {
-//     next(
-//       err instanceof ApiError
-//         ? err
-//         : new ApiError(400, err.details?.[0]?.message)
-//     );
-//   }
-// };
+      addresses: z
+        .array(
+          z.object({
+            type: z.enum(["home", "work", "other"]).optional(),
+            street: z.string().min(5).max(200).optional(),
+            city: z.string().min(2).max(50).optional(),
+            state: z.string().min(2).max(50).optional(),
+            pincode: z
+              .string()
+              .regex(/^[0-9]{6}$/, "Invalid pincode")
+              .optional(),
+            country: z.string().min(2).max(50).optional(),
+            isDefault: z.boolean().optional(),
+          }),
+        )
+        .optional(),
+    })
+    .refine((data) => Object.keys(data).length > 0, {
+      message: "At least one field is required to update profile",
+    }),
+});
 
 // =============================================
 // 🔄 Update User Account Status Validator (Admin)
@@ -214,114 +129,24 @@ export const updateAccountStatusSchema = z.object({
   }),
 
   body: z.object({
-    status: z
-      .nativeEnum(UserStatusEnum)
-      .refine((val) => !!val, {
-        message: "Account status is required",
-      }),
+    status: z.nativeEnum(UserStatusEnum).refine((val) => !!val, {
+      message: "Account status is required",
+    }),
   }),
 });
 
 // =============================================
-// 🗑️ Delete User Validator (Admin)
-// =============================================
-// const deleteUserValidator = async (req, res, next) => {
-//   try {
-//     const schema = Joi.object({
-//       userId: Joi.number()
-//         .integer()
-//         .positive()
-//         .required()
-//         .messages({
-//           "any.required": "User ID is required",
-//           "number.base": "User ID must be a number",
-//           "number.integer": "User ID must be an integer",
-//           "number.positive": "User ID must be a positive number",
-//         }),
-//     });
-
-//     await schema.validateAsync(req.params, { abortEarly: true });
-
-//     next();
-//   } catch (err) {
-//     next(
-//       err instanceof ApiError
-//         ? err
-//         : new ApiError(400, err.details?.[0]?.message)
-//     );
-//   }
-// };
-
-// =============================================
 // 📋 Get All Users Query Validator (Admin)
 // =============================================
-// const getAllUsersValidator = async (req, res, next) => {
-//   try {
-//     const schema = Joi.object({
-//       page: Joi.number()
-//         .integer()
-//         .min(1)
-//         .messages({
-//           "number.base": "Page must be a number",
-//           "number.integer": "Page must be an integer",
-//           "number.min": "Page must be at least 1",
-//         })
-//         .optional(),
+export const getAllUsersSchema = z.object({
+  query: z.object({
+    page: z.coerce.number().int().min(1).optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
 
-//       limit: Joi.number()
-//         .integer()
-//         .min(1)
-//         .max(100)
-//         .messages({
-//           "number.base": "Limit must be a number",
-//           "number.integer": "Limit must be an integer",
-//           "number.min": "Limit must be at least 1",
-//           "number.max": "Limit cannot exceed 100",
-//         })
-//         .optional(),
+    search: z.string().min(1).max(100).optional(),
 
-//       search: Joi.string()
-//         .min(1)
-//         .max(100)
-//         .trim()
-//         .messages({
-//           "string.min": "Search query must be at least 1 character",
-//           "string.max": "Search query cannot exceed 100 characters",
-//         })
-//         .optional(),
+    role: z.enum(["CUSTOMER", "SELLER", "ADMIN"]).optional(),
 
-//       role: Joi.string()
-//         .valid("CUSTOMER", "SELLER", "ADMIN")
-//         .messages({
-//           "any.only": "Role must be CUSTOMER, SELLER, or ADMIN",
-//         })
-//         .optional(),
-
-//       status: Joi.string()
-//         .valid("ACTIVE", "DISABLED", "BLOCKED", "SUSPENDED")
-//         .messages({
-//           "any.only": "Status must be ACTIVE, DISABLED, BLOCKED, or SUSPENDED",
-//         })
-//         .optional(),
-//     });
-
-//     await schema.validateAsync(req.query, { abortEarly: true });
-
-//     next();
-//   } catch (err) {
-//     next(
-//       err instanceof ApiError
-//         ? err
-//         : new ApiError(400, err.details?.[0]?.message)
-//     );
-//   }
-// };
-
-// module.exports = {
-//   sendOtpValidator,
-//   verifyOtpAndAuthenticateValidator,
-//   completeUserProfileValidator,
-//   updateUserStatusValidator,
-//   deleteUserValidator,
-//   getAllUsersValidator,
-// };
+    status: z.enum(["ACTIVE", "DISABLED", "BLOCKED", "SUSPENDED"]).optional(),
+  }),
+});

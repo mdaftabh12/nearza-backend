@@ -63,7 +63,6 @@ Seller.init(
       type: DataTypes.INTEGER,
       allowNull: false,
       unique: true,
-      
     },
 
     storeName: {
