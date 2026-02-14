@@ -87,6 +87,44 @@ export const adminAuth = asyncHandler(
 );
 
 // =============================================
+// 🏪 Authenticate SELLER only
+// =============================================
+export const sellerAuth = asyncHandler(
+  async (req: Request, _res: Response, next: NextFunction) => {
+    const token = getTokenFromRequest(req);
+
+    if (!token) {
+      throw new ApiError(401, "Authentication required. Please log in.");
+    }
+
+    try {
+      const decoded = verifyToken(token) as JwtPayload & {
+        roles?: string[] | string;
+      };
+
+      const roles = Array.isArray(decoded.roles)
+        ? decoded.roles
+        : [decoded.roles];
+
+      if (!roles?.includes("SELLER")) {
+        throw new ApiError(403, "Access denied. Seller privileges required.");
+      }
+
+      req.user = decoded;
+      next();
+    } catch (error: any) {
+      if (error instanceof ApiError) throw error;
+
+      if (error.message === "Token has expired") {
+        throw new ApiError(401, "Session expired. Please log in again.");
+      }
+
+      throw new ApiError(401, "Invalid authentication token.");
+    }
+  },
+);
+
+// =============================================
 // 🌍 Global Express Request Augmentation
 // =============================================
 declare global {

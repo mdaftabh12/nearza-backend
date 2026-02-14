@@ -102,20 +102,29 @@ export const verifyOtpAndAuthenticate = asyncHandler(
       });
     }
 
+    // 🚫 STATUS CHECK (IMPORTANT PART)
+    if (user.status === "BLOCKED") {
+      throw new ApiError(403, "Your account has been blocked by admin.");
+    }
+
+    if (user.status === "DISABLED") {
+      throw new ApiError(
+        403,
+        "Your account is disabled. Please contact support.",
+      );
+    }
+
+    if (user.status === "SUSPENDED") {
+      throw new ApiError(403, "Your account is temporarily suspended.");
+    }
+
     // 🔑 Generate auth token
     const authToken = generateToken({
       id: String(user.id),
       email: user.email,
     });
 
-    // 🧹 Delete OTP after verification
-    const deleteQuery: any = {
-      $or: [],
-    };
-
-    // if (email) deleteQuery.$or.push({ email });
-    // if (phone) deleteQuery.$or.push({ phone });
-
+    // 🧹 Delete OTP
     await otpModel.deleteMany(email ? { email } : { phone });
 
     // 🍪 Set token cookie
@@ -238,6 +247,61 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
 
   return res.status(200).json(new ApiResponse("Logged out successfully"));
 });
+
+// =============================================
+// 🔐 Delete Account Controller
+// =============================================
+export const deleteAccount = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new ApiError(401, "Unauthorized");
+    }
+    const user = await userModel.findByPk(userId);
+
+    if (!user) {
+      throw new ApiError(404, "User not found");
+    }
+
+    await user.destroy();
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+    });
+    return res
+      .status(200)
+      .json(new ApiResponse("User account deleted successfully"));
+  },
+);
+
+// =============================================
+// ♻️ Restore My User Profile
+// =============================================
+export const restoreMyProfile = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new ApiError(401, "Unauthorized");
+    }
+    const user = await userModel.findOne({
+      where: { id: userId },
+      paranoid: false, // Include soft-deleted records
+    });
+
+    if (!user) {
+      throw new ApiError(404, "User not found");
+    }
+
+    await user.restore();
+
+    return res
+      .status(200)
+      .json(new ApiResponse(user, "User profile restored successfully"));
+  },
+);
 
 // =============================================
 // ADMIN CONTROLLERS

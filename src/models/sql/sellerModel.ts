@@ -58,7 +58,7 @@ Seller.init(
       autoIncrement: true,
       primaryKey: true,
     },
-  
+
     userId: {
       type: DataTypes.INTEGER,
       allowNull: false,
@@ -116,6 +116,7 @@ Seller.init(
     modelName: "Seller",
     tableName: "sellers",
     timestamps: true,
+    paranoid: true, // ✅ Soft delete enabled
     indexes: [
       { unique: true, fields: ["userId"] },
       { unique: true, fields: ["storeSlug"] },

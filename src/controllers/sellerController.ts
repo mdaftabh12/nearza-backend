@@ -4,6 +4,7 @@ import { userModel } from "../models/sql/userModel";
 import asyncHandler from "../utils/asyncHandler";
 import { ApiError } from "../utils/ApiError";
 import { ApiResponse } from "../utils/ApiResponse";
+import { Op } from "sequelize";
 
 // =============================================
 // 📝 Apply for Seller Account (User)
@@ -106,6 +107,77 @@ export const updateMySellerProfile = asyncHandler(
 );
 
 // =============================================
+// 🗑️ Delete My Seller Profile (Approved Only)
+// =============================================
+export const deleteMySellerProfile = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = Number(req.user?.id);
+    const seller = await sellerModel.findOne({ where: { userId } });
+
+    if (!seller) {
+      throw new ApiError(404, "Seller not found");
+    }
+    if (seller.status !== "APPROVED") {
+      throw new ApiError(400, "Only approved sellers can delete profile");
+    }
+    await seller.destroy(); // Soft delete (paranoid)
+
+    return res
+      .status(200)
+      .json(new ApiResponse(null, "Seller profile deleted successfully"));
+  },
+);
+
+// =============================================
+// ♻️ Restore My Seller Profile (Approved Only)
+// =============================================
+export const restoreMySellerProfile = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = Number(req.user?.id);
+    const seller = await sellerModel.findOne({
+      where: { userId },
+      paranoid: false, // Include soft-deleted records
+    });
+
+    if (!seller) {
+      throw new ApiError(404, "Seller not found");
+    }
+    if (seller.status !== "APPROVED") {
+      throw new ApiError(400, "Only approved sellers can restore profile");
+    }
+    await seller.restore(); // Restore soft-deleted record
+
+    return res
+      .status(200)
+      .json(new ApiResponse(null, "Seller profile restored successfully"));
+  },
+);
+
+// =============================================
+// 🧑‍💼✨ Seller Resubmit Application 🔄📄
+// =============================================
+export const resubmitSellerApplication = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = Number(req.user?.id);
+    const seller = await sellerModel.findOne({ where: { userId } });
+
+    if (!seller) {
+      throw new ApiError(404, "Seller not found");
+    }
+    if (seller.status !== "REJECTED") {
+      throw new ApiError(400, "Only rejected sellers can resubmit application");
+    }
+    await seller.update({ ...req.body, status: "PENDING" });
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(seller, "Seller application resubmitted successfully"),
+      );
+  },
+);
+
+// =============================================
 // ADMIN CONTROLLERS
 // =============================================
 
@@ -151,90 +223,122 @@ export const updateSellerStatus = asyncHandler(
   },
 );
 
-// 1. User apply for seller account
-// Seller profile created with "PENDING" status
-// Admin reviews application and updates status to "APPROVED", "REJECTED", or "SUSPENDED"
+// =============================================
+// 🗂️ Get Seller Applications (Admin Only)
+// =============================================
+export const getSellerApplications = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { status, search, page = 1, limit = 10 } = req.query;
 
-// 2. Admin update seller status
-// "APPROVED", "REJECTED", "SUSPENDED"
-// Approved -> can access seller dashboard, list products, view orders
-// Update user status ["USER" ,"SELLER"] role
-// Rejected -> cannot access seller dashboard, can re-apply after 30 days
-// Suspended -> cannot access seller dashboard, cannot re-apply for 90 days
+    // Build where clause
+    const whereClause: any = {};
 
-// 3. User can view their seller application status in their profile
-// "Pending", "Approved", "Rejected", "Suspended"
-// If approved, show link to seller dashboard
+    if (status) {
+      whereClause.status = status;
+    }
 
-// export const getSellerApplications = asyncHandler(
-//   async (req: Request, res: Response) => {
-//     const { status, dateApplied, search, page = 1, limit = 10 } = req.query;
+    if (search) {
+      whereClause[Op.or] = [
+        { storeName: { [Op.iLike]: `%${search}%` } },
+        { "$user.email$": { [Op.iLike]: `%${search}%` } },
+      ];
+    }
 
-//     const whereClause: any = {};
+    // Calculate pagination
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
+    const offset = (pageNumber - 1) * limitNumber;
 
-//     if (status) {
-//       whereClause.status = status;
-//     }
+    // Fetch seller applications with pagination
+    const { rows: sellers, count } = await sellerModel.findAndCountAll({
+      where: whereClause,
+      include: [
+        {
+          model: userModel,
+          as: "user",
+          attributes: ["email"],
+          required: false, // Use LEFT JOIN to include sellers even without user data
+        },
+      ],
+      limit: limitNumber,
+      offset,
+      order: [["createdAt", "DESC"]], // Add default ordering
+      distinct: true, // Ensure accurate count with joins
+    });
 
-//     if (dateApplied) {
-//       const date = new Date(dateApplied as string);
-//       whereClause.createdAt = {
-//         [Op.gte]: date,
-//       };
-//     }
+    return res.status(200).json(
+      new ApiResponse(
+        {
+          sellers,
+          pagination: {
+            total: count,
+            page: pageNumber,
+            limit: limitNumber,
+            totalPages: Math.ceil(count / limitNumber),
+          },
+        },
+        "Seller applications retrieved successfully",
+      ),
+    );
+  },
+);
 
-//     if (search) {
-//       whereClause[Op.or] = [
-//         { storeName: { [Op.iLike]: `%${search}%` } },
-//         { "$user.email$": { [Op.iLike]: `%${search}%` } },
-//       ];
-//     }
+// =============================================
+// 🗂️ Get Seller Profile (Admin Only)
+// =============================================
+export const getSellerById = asyncHandler(
+  async (req: Request, res: Response) => {
+    const sellerId = Number(req.params.sellerId);
+    const seller = await sellerModel.findByPk(sellerId, {
+      include: [
+        {
+          model: userModel,
+          as: "user",
+          attributes: ["email", "roles", "status"],
+        },
+      ],
+    });
 
-//     const offset = (Number(page) - 1) * Number(limit);
+    if (!seller) {
+      throw new ApiError(404, "Seller not found");
+    }
 
-//     const { rows: sellers, count } = await sellerModel.findAndCountAll({
-//       where: whereClause,
-//       include: [
-//         {
-//           model: userModel,
-//           as: "user",
-//           attributes: ["email"],
-//         },
-//       ],
-//       limit: Number(limit),
-//       offset,
-//     });
+    return res
+      .status(200)
+      .json(new ApiResponse(seller, "Seller profile retrieved successfully"));
+  },
+);
 
-//     return res.status(200).json(
-//       new ApiResponse(
-//         {
-//           sellers,
-//           pagination: {
-//             total: count,
-//             page: Number(page),
-//             limit: Number(limit),
-//             totalPages: Math.ceil(count / Number(limit)),
-//           },
-//         },
-//         "Seller applications retrieved successfully",
-//       ),
-//     );
-//   },
-// );
+// =============================================
+// 🗑️ Delete Seller Profile (Admin Only)
+// =============================================
+export const deleteSeller = asyncHandler(
+  async (req: Request, res: Response) => {
+    const sellerId = Number(req.params.sellerId);
 
-// 4. Admin can view list of seller applications with filters (status, date applied) and search by store name or user email
-// List of seller applications with pagination
-// Filter by status (PENDING, APPROVED, REJECTED, SUSPENDED)
-// Search by store name or user email
+    const seller = await sellerModel.findByPk(sellerId);
 
-// 5. Get seller profile
-// User can view their seller profile details and status
-// Admin can view any seller profile details and status
+    if (!seller) throw new ApiError(404, "Seller not found");
 
-// 6. Update seller profile
-// User can update their seller profile details (store name, description, business email/phone, address)
-// Admin can update any seller profile details and status
+    await seller.destroy(); // Soft delete (paranoid)
 
-// 7. Delete seller profile
-// User can delete their seller profile (soft delete, status set to "DELETED")
-// Admin can delete any seller profile (soft delete, status set to "DELETED")
+    return res.status(200).json(new ApiResponse(null, "Seller deleted"));
+  },
+);
+
+// =============================================
+// ♻️ Restore Seller (Admin Only)
+// =============================================
+export const restoreSeller = asyncHandler(
+  async (req: Request, res: Response) => {
+    const sellerId = Number(req.params.sellerId);
+
+    const seller = await sellerModel.findByPk(sellerId, { paranoid: false });
+
+    await sellerModel.restore({
+      where: { id: req.params.id },
+    });
+
+    return res.status(200).json(new ApiResponse(null, "Seller restored"));
+  },
+);

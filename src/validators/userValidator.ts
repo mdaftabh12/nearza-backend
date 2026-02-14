@@ -150,3 +150,15 @@ export const getAllUsersSchema = z.object({
     status: z.enum(["ACTIVE", "DISABLED", "BLOCKED", "SUSPENDED"]).optional(),
   }),
 });
+
+// =============================================
+// 👤 Get User By ID Validator (Admin)
+// =============================================
+export const getUserByIdSchema = z.object({
+  params: z.object({
+    userId: z.coerce
+      .number()
+      .int()
+      .positive("User ID must be a valid positive number"),
+  }),
+});

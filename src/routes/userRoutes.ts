@@ -8,6 +8,8 @@ import {
   getUserProfile,
   completeUserProfile,
   logout,
+  deleteAccount,
+  restoreMyProfile,
   getAllUsers,
   updateAccountStatus,
   getUserById,
@@ -16,30 +18,31 @@ import {
   sendOtpSchema,
   verifyOtpSchema,
   completeUserProfileSchema,
-  getAllUsersSchema,
   updateAccountStatusSchema,
+  getAllUsersSchema,
+  getUserByIdSchema,
 } from "../validators/userValidator";
 
 const router = Router();
 
 // =============================================
-// 🔓 Public Routes (No Authentication Required)
+// 🔓 PUBLIC ROUTES (No Authentication Required)
 // =============================================
 
-// Send OTP for login/signup
+// Send OTP for login/signup : POST
 router.post("/send-otp", validate(sendOtpSchema), sendOtp);
 
-// Verify OTP and authenticate user
+// Verify OTP and authenticate user : POST
 router.post("/verify-otp", validate(verifyOtpSchema), verifyOtpAndAuthenticate);
 
-// =============================================
-// 🔒 Protected Routes (Authentication Required)
-// =============================================
+// ===================================================
+// 🔐 PROTECTED ROUTES (User Authentication Required)
+// ===================================================
 
-// Get current user profile
+// Get current user profile : GET
 router.get("/user-profile", userAuth, getUserProfile);
 
-// Complete user profile (for new users)
+// Complete user profile (for new users) : PUT
 router.put(
   "/complete-profile",
   userAuth,
@@ -48,17 +51,23 @@ router.put(
   completeUserProfile,
 );
 
-// Logout user
+// Logout user : POST
 router.post("/logout", userAuth, logout);
 
-// =============================================
-// 🛡️ Admin Routes (Admin Authentication Required)
-// =============================================
+// Delete user account (soft delete) : DELETE
+router.delete("/delete-account", userAuth, deleteAccount);
 
-// Get all users with pagination, search, and filters
-router.get("/users", adminAuth, validate(getAllUsersSchema), getAllUsers);
+// Restore soft-deleted user profile : POST
+router.post("/restore-profile", userAuth, restoreMyProfile);
 
-// Update user status
+// ================================================
+// 👑 ADMIN ROUTES (Admin Authentication Required)
+// ================================================
+
+// Get all users with pagination, search, and filters : GET
+router.get("/all-user", adminAuth, validate(getAllUsersSchema), getAllUsers);
+
+// Update user status (ACTIVE, DISABLED, BLOCKED, SUSPENDED) : PUT
 router.put(
   "/account-status/:userId",
   adminAuth,
@@ -66,7 +75,12 @@ router.put(
   updateAccountStatus,
 );
 
-// Get single user by ID
-router.get("/single-user/:userId", adminAuth, getUserById);
+// Get single user by ID : GET
+router.get(
+  "/single-user/:userId",
+  adminAuth,
+  validate(getUserByIdSchema),
+  getUserById,
+);
 
 export default router;

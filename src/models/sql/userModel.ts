@@ -114,11 +114,9 @@ User.init(
     tableName: "users",
     modelName: "User",
     timestamps: true,
-    indexes: [
-      { unique: true, fields: ["email"] },
-      { fields: ["phone"] },
-    ],
-  }
+    paranoid: true, // ✅ Soft delete enabled
+    indexes: [{ unique: true, fields: ["email"] }, { fields: ["phone"] }],
+  },
 );
 
 export const userModel = User;

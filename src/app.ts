@@ -16,6 +16,7 @@ import seedAdmin from "./utils/seedAdmin";
 // =============================================
 // SQL-based routes
 import userRoutes from "./routes/userRoutes";
+import sellerRoutes from "./routes/sellerRoutes";
 
 // MongoDB-based routes
 // import userRoutes from "./src/routes/userRoutes";
@@ -68,7 +69,7 @@ import errorHandler from "./middlewares/errorHandler";
 // 🌐 API Routes
 // =============================================
 app.use("/api/users", userRoutes); // User CRUD & Authentication
-// app.use("/api/categories", categoryRoutes); // Category management
+app.use("/api/sellers", sellerRoutes); // Seller application & management
 
 // =============================================
 // 💚 Health Check Route
