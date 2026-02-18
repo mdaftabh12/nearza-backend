@@ -37,6 +37,13 @@ export const userAuth = asyncHandler(
         roles?: string[] | string;
       };
 
+      if (!decoded.roles) {
+        throw new ApiError(
+          403,
+          "Access denied. User roles not found in token.",
+        );
+      }
+
       req.user = decoded; // ✅ TS happy
       next();
     } catch (error: any) {

@@ -6,7 +6,7 @@ import otpModel from "../models/mongo/otpModel";
 import { userModel, UserStatus } from "../models/sql/userModel";
 import { generateOTP } from "../utils/generateOTP";
 import { generateToken } from "../utils/jwt";
-import { Op, WhereOptions } from "sequelize";
+import { Sequelize, Op, WhereOptions } from "sequelize";
 import {
   uploadOnCloudinary,
   deleteFromCloudinary,
@@ -20,11 +20,14 @@ export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
 
   // 🛑 Safety check
   if (!email && !phone) {
-    throw new ApiError(400, "Email or phone is required to generate OTP");
+    throw new ApiError(
+      400,
+      "Please provide either an email address or a phone number.",
+    );
   }
 
   if (email && phone) {
-    throw new ApiError(400, "Provide only one: email OR phone");
+    throw new ApiError(400, "Please provide either email or phone, not both.");
   }
 
   // Generate OTP
@@ -51,7 +54,7 @@ export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
         phone,
         otp, // ⚠️ DEV ONLY
       },
-      "OTP sent successfully",
+      "A one-time verification code has been sent successfully.",
     ),
   );
 });
@@ -68,7 +71,7 @@ export const verifyOtpAndAuthenticate = asyncHandler(
     if (email && phone) {
       throw new ApiError(
         400,
-        "Either email or phone is required to generate OTP",
+        "Please provide either an email address or a phone number.",
       );
     }
 
@@ -77,11 +80,14 @@ export const verifyOtpAndAuthenticate = asyncHandler(
     const otpRecord = await otpModel.findOne(otpQuery).sort({ createdAt: -1 });
 
     if (!otpRecord) {
-      throw new ApiError(400, "Invalid OTP. Please try again.");
+      throw new ApiError(400, "The verification code you entered is invalid.");
     }
 
     if (otpRecord.expiresAt < currentTime) {
-      throw new ApiError(400, "OTP has expired. Please request a new one.");
+      throw new ApiError(
+        400,
+        "The verification code has expired. Please request a new code.",
+      );
     }
 
     // 🧾 User lookup condition
@@ -104,24 +110,31 @@ export const verifyOtpAndAuthenticate = asyncHandler(
 
     // 🚫 STATUS CHECK (IMPORTANT PART)
     if (user.status === "BLOCKED") {
-      throw new ApiError(403, "Your account has been blocked by admin.");
+      throw new ApiError(
+        403,
+        "Your account has been blocked. Please contact support for assistance.",
+      );
     }
 
     if (user.status === "DISABLED") {
       throw new ApiError(
         403,
-        "Your account is disabled. Please contact support.",
+        "Your account is currently disabled. Please reach out to support.",
       );
     }
 
     if (user.status === "SUSPENDED") {
-      throw new ApiError(403, "Your account is temporarily suspended.");
+      throw new ApiError(
+        403,
+        "Your account has been temporarily suspended. Please try again later.",
+      );
     }
 
     // 🔑 Generate auth token
     const authToken = generateToken({
       id: String(user.id),
       email: user.email,
+      roles: user.roles,
     });
 
     // 🧹 Delete OTP
@@ -142,7 +155,7 @@ export const verifyOtpAndAuthenticate = asyncHandler(
           user,
           isNewUser,
         },
-        "Authentication successful",
+        "You have been authenticated successfully.",
       ),
     );
 
@@ -161,18 +174,18 @@ export const getUserProfile = asyncHandler(
     const userId = req.user?.id;
 
     if (!userId) {
-      throw new ApiError(401, "Unauthorized");
+      throw new ApiError(401, "You are not authorized to perform this action.");
     }
 
     const user = await userModel.findByPk(userId);
 
     if (!user) {
-      throw new ApiError(404, "User not found");
+      throw new ApiError(404, "The requested user account could not be found.");
     }
 
     return res
       .status(200)
-      .json(new ApiResponse(user, "Profile fetched successfully"));
+      .json(new ApiResponse(user, "User profile retrieved successfully."));
   },
 );
 
@@ -184,13 +197,13 @@ export const completeUserProfile = asyncHandler(
     const userId = req.user?.id;
 
     if (!userId) {
-      throw new ApiError(401, "Unauthorized");
+      throw new ApiError(401, "You are not authorized to perform this action.");
     }
 
     const user = await userModel.findByPk(userId);
 
     if (!user) {
-      throw new ApiError(404, "User not found");
+      throw new ApiError(404, "The requested user account could not be found.");
     }
 
     const { fullName, email, phone, addresses } = req.body || {};
@@ -206,7 +219,10 @@ export const completeUserProfile = asyncHandler(
       const uploadedImage = await uploadOnCloudinary(req?.file?.path);
 
       if (!uploadedImage?.secure_url) {
-        throw new ApiError(500, "Failed to upload profile image");
+        throw new ApiError(
+          500,
+          "Something went wrong while uploading your profile image. Please try again.",
+        );
       }
 
       updateData.profileImage = uploadedImage.secure_url;
@@ -222,7 +238,7 @@ export const completeUserProfile = asyncHandler(
     if (Object.keys(updateData).length === 0) {
       throw new ApiError(
         400,
-        "At least one field is required to update profile",
+        "Please provide at least one field to update your profile.",
       );
     }
 
@@ -230,7 +246,9 @@ export const completeUserProfile = asyncHandler(
 
     return res
       .status(200)
-      .json(new ApiResponse(user, "Profile updated successfully"));
+      .json(
+        new ApiResponse(user, "Your profile has been updated successfully."),
+      );
   },
 );
 
@@ -245,7 +263,9 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
     sameSite: "strict",
   });
 
-  return res.status(200).json(new ApiResponse("Logged out successfully"));
+  return res
+    .status(200)
+    .json(new ApiResponse("You have been logged out successfully."));
 });
 
 // =============================================
@@ -256,12 +276,12 @@ export const deleteAccount = asyncHandler(
     const userId = req.user?.id;
 
     if (!userId) {
-      throw new ApiError(401, "Unauthorized");
+      throw new ApiError(401, "You are not authorized to perform this action.");
     }
     const user = await userModel.findByPk(userId);
 
     if (!user) {
-      throw new ApiError(404, "User not found");
+      throw new ApiError(404, "The requested user account could not be found.");
     }
 
     await user.destroy();
@@ -272,7 +292,7 @@ export const deleteAccount = asyncHandler(
     });
     return res
       .status(200)
-      .json(new ApiResponse("User account deleted successfully"));
+      .json(new ApiResponse("Your account has been deleted successfully."));
   },
 );
 
@@ -284,7 +304,7 @@ export const restoreMyProfile = asyncHandler(
     const userId = req.user?.id;
 
     if (!userId) {
-      throw new ApiError(401, "Unauthorized");
+      throw new ApiError(401, "You are not authorized to perform this action.");
     }
     const user = await userModel.findOne({
       where: { id: userId },
@@ -292,14 +312,16 @@ export const restoreMyProfile = asyncHandler(
     });
 
     if (!user) {
-      throw new ApiError(404, "User not found");
+      throw new ApiError(404, "The requested user account could not be found.");
     }
 
     await user.restore();
 
     return res
       .status(200)
-      .json(new ApiResponse(user, "User profile restored successfully"));
+      .json(
+        new ApiResponse(user, "Your account has been restored successfully."),
+      );
   },
 );
 
@@ -322,12 +344,21 @@ export const getAllUsers = asyncHandler(async (req: Request, res: Response) => {
   const whereClause: WhereOptions<any> = {
     ...(search && {
       [Op.or]: [
-        { fullName: { [Op.iLike]: `%${search}%` } },
-        { email: { [Op.iLike]: `%${search}%` } },
-        { phone: { [Op.iLike]: `%${search}%` } },
+        { fullName: { [Op.like]: `%${search}%` } }, // ✅ MySQL uses Op.like (case-insensitive by default)
+        { email: { [Op.like]: `%${search}%` } },
+        { phone: { [Op.like]: `%${search}%` } },
       ],
     }),
-    ...(role && { roles: { [Op.contains]: [role] } }),
+    ...(role && {
+      roles: Sequelize.where(
+        Sequelize.fn(
+          "JSON_CONTAINS",
+          Sequelize.col("roles"),
+          JSON.stringify([role]),
+        ),
+        1,
+      ),
+    }), // ✅ MySQL uses JSON_CONTAINS for JSON array filtering
     ...(status && { status }),
   };
 
@@ -350,7 +381,7 @@ export const getAllUsers = asyncHandler(async (req: Request, res: Response) => {
           totalPages: Math.ceil(count / limit),
         },
       },
-      "Users fetched successfully",
+      "User list retrieved successfully.",
     ),
   );
 });
@@ -366,14 +397,19 @@ export const updateAccountStatus = asyncHandler(
     const user = await userModel.findByPk(userId);
 
     if (!user) {
-      throw new ApiError(404, "User not found");
+      throw new ApiError(404, "The requested user account could not be found.");
     }
 
     await user.update({ status });
 
     return res
       .status(200)
-      .json(new ApiResponse(user, "User status updated successfully"));
+      .json(
+        new ApiResponse(
+          user,
+          "The user's account status has been updated successfully.",
+        ),
+      );
   },
 );
 
@@ -385,10 +421,10 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
 
   const user = await userModel.findByPk(userId);
   if (!user) {
-    throw new ApiError(404, "User not found");
+    throw new ApiError(404, "The requested user account could not be found.");
   }
 
   return res
     .status(200)
-    .json(new ApiResponse(user, "User details fetched successfully"));
+    .json(new ApiResponse(user, "User details retrieved successfully."));
 });

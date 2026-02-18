@@ -16,7 +16,8 @@ import seedAdmin from "./utils/seedAdmin";
 // =============================================
 // SQL-based routes
 import userRoutes from "./routes/userRoutes";
-import sellerRoutes from "./routes/sellerRoutes";
+// import sellerRoutes from "./routes/sellerRoutes";
+import categoryRoutes from "./routes/categoryRoutes";
 
 // MongoDB-based routes
 // import userRoutes from "./src/routes/userRoutes";
@@ -55,7 +56,14 @@ import errorHandler from "./middlewares/errorHandler";
     await connectMySQL();
 
     // 🔄 Sync Sequelize Models (safe sync)
-    await sequelize.sync();
+    const isDevelopment = process.env.NODE_ENV === "development";
+
+    if (isDevelopment) {
+      await sequelize.sync();
+    } else {
+      await sequelize.authenticate();
+    }
+
     console.log("✔ Tables synced successfully");
 
     // 👑 Seed Default Admin User
@@ -69,7 +77,8 @@ import errorHandler from "./middlewares/errorHandler";
 // 🌐 API Routes
 // =============================================
 app.use("/api/users", userRoutes); // User CRUD & Authentication
-app.use("/api/sellers", sellerRoutes); // Seller application & management
+// app.use("/api/sellers", sellerRoutes); // Seller application & management
+app.use("/api/categories", categoryRoutes); // Product categories
 
 // =============================================
 // 💚 Health Check Route

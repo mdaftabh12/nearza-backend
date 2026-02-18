@@ -65,7 +65,7 @@ router.post("/restore-profile", userAuth, restoreMyProfile);
 // ================================================
 
 // Get all users with pagination, search, and filters : GET
-router.get("/all-user", adminAuth, validate(getAllUsersSchema), getAllUsers);
+router.get("/users", adminAuth, validate(getAllUsersSchema), getAllUsers);
 
 // Update user status (ACTIVE, DISABLED, BLOCKED, SUSPENDED) : PUT
 router.put(

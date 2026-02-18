@@ -10,13 +10,13 @@ import { sequelize } from "../../config/sequelize";
 import { userModel } from "./userModel";
 
 class Seller extends Model<
-  InferAttributes<Seller>,
+  InferAttributes<Seller, { omit: "createdAt" | "updatedAt" | "deletedAt" }>,
   InferCreationAttributes<Seller>
 > {
   declare id: CreationOptional<number>;
 
   // 🔗 Relation
-  declare userId: ForeignKey<userModel["id"]>;
+  declare userId: ForeignKey<InstanceType<typeof userModel>["id"]>;
 
   // 🏪 Business Info
   declare storeName: string;
@@ -28,7 +28,7 @@ class Seller extends Model<
   declare businessPhone: string | null;
 
   // 📍 Address
-  declare address: object | null;
+  declare address: string | null;
 
   // 💳 KYC & Verification
   declare gstNumber: string | null;
@@ -40,15 +40,10 @@ class Seller extends Model<
     "PENDING" | "APPROVED" | "REJECTED" | "SUSPENDED"
   >;
 
+  // ⏱ Timestamps (Sequelize auto-manage karega)
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
-
-  static associate(models: any) {
-    Seller.belongsTo(models.User, {
-      foreignKey: "userId",
-      as: "user",
-    });
-  }
+  declare deletedAt: CreationOptional<Date>;
 }
 
 Seller.init(
@@ -63,6 +58,11 @@ Seller.init(
       type: DataTypes.INTEGER,
       allowNull: false,
       unique: true,
+      references: {
+        model: "users",
+        key: "id",
+      },
+      onDelete: "CASCADE",
     },
 
     storeName: {
@@ -78,27 +78,35 @@ Seller.init(
 
     description: {
       type: DataTypes.TEXT,
+      allowNull: true,
     },
 
     businessEmail: {
       type: DataTypes.STRING,
-      validate: { isEmail: true },
+      allowNull: true,
+      validate: {
+        isEmail: true,
+      },
     },
 
     businessPhone: {
       type: DataTypes.STRING,
+      allowNull: true,
     },
 
     address: {
       type: DataTypes.JSON,
+      allowNull: true,
     },
 
     gstNumber: {
       type: DataTypes.STRING,
+      allowNull: true,
     },
 
     panNumber: {
       type: DataTypes.STRING,
+      allowNull: true,
     },
 
     isVerified: {
@@ -116,13 +124,27 @@ Seller.init(
     modelName: "Seller",
     tableName: "sellers",
     timestamps: true,
-    paranoid: true, // ✅ Soft delete enabled
+    paranoid: true, // ✅ Soft delete
     indexes: [
-      { unique: true, fields: ["userId"] },
-      { unique: true, fields: ["storeSlug"] },
+      {
+        unique: true,
+        fields: ["userId"],
+      },
+      {
+        unique: true,
+        fields: ["storeSlug"],
+      },
     ],
-  },
+  }
 );
+
+// 🔗 Association (call this in index.ts after all models loaded)
+export const associateSeller = () => {
+  Seller.belongsTo(userModel, {
+    foreignKey: "userId",
+    as: "user",
+  });
+};
 
 export const sellerModel = Seller;
 export default Seller;

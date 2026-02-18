@@ -5,7 +5,16 @@ import { ApiError } from "../utils/ApiError";
 export const validate =
   (schema: ZodSchema) => (req: Request, _res: Response, next: NextFunction) => {
     try {
-      schema.parse(req.body);
+     const result = schema.parse({
+        body: req.body,
+        params: req.params,
+        query: req.query,
+      }) as { body?: any; params?: any; query?: any };
+
+      req.body = result.body ?? req.body;
+      req.params = result.params ?? req.params;
+      Object.assign(req.query, result.query ?? req.query);
+
       next();
     } catch (error: any) {
       if (error instanceof ZodError) {
