@@ -58,10 +58,9 @@ export const getAllCategories = asyncHandler(
 
 export const getCategoryById = asyncHandler(
   async (req: Request, res: Response) => {
-    const { id } = req.params;
-    const category = await categoryModel.findOne({
-      where: { id, isDisabled: false },
-    });
+    const categoryId = Number(req.params.categoryId);
+
+    const category = await categoryModel.findByPk(categoryId);
 
     if (!category) {
       throw new ApiError(404, "The requested category was not found.");
@@ -76,8 +75,8 @@ export const getCategoryById = asyncHandler(
 
 export const deleteCategory = asyncHandler(
   async (req: Request, res: Response) => {
-    const { id } = req.params;
-    const category = await categoryModel.findOne({ where: { id } });
+    const categoryId = Number(req.params.categoryId);
+    const category = await categoryModel.findByPk(categoryId);
 
     if (!category) {
       throw new ApiError(404, "The requested category does not exist.");
@@ -97,8 +96,9 @@ export const deleteCategory = asyncHandler(
 
 export const isDisableCategory = asyncHandler(
   async (req: Request, res: Response) => {
-    const { id } = req.params;
-    const category = await categoryModel.findOne({ where: { id } });
+    const categoryId = Number(req.params.categoryId);
+
+    const category = await categoryModel.findByPk(categoryId);
 
     if (!category) {
       throw new ApiError(404, "The requested category does not exist.");
@@ -111,11 +111,68 @@ export const isDisableCategory = asyncHandler(
       .status(200)
       .json(
         new ApiResponse(
-          category,
           category.isDisabled
             ? "Category has been disabled successfully."
             : "Category has been enabled successfully.",
         ),
+      );
+  },
+);
+
+export const updateCategory = asyncHandler(
+  async (req: Request, res: Response) => {
+    const categoryId = Number(req.params.categoryId);
+
+    const { name, description } = req.body as {
+      name?: string;
+      description?: string;
+    };
+
+    const category = await categoryModel.findByPk(categoryId);
+    if (!category)
+      throw new ApiError(404, "The requested category does not exist.");
+
+    // ========= Image Handling ========= //
+    if (req.file?.path) {
+      if (category.categoryImage)
+        await deleteFromCloudinary(category.categoryImage);
+      const uploadResult = await uploadOnCloudinary(req.file.path);
+      if (!uploadResult?.secure_url)
+        throw new ApiError(
+          500,
+          "Failed to upload category image. Please try again.",
+        );
+      category.categoryImage = uploadResult.secure_url;
+    }
+
+    // ========= Field Updates =========
+    if (name) category.name = name;
+    if (description) category.description = description.trim();
+
+    await category.save();
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(category, "Category has been updated successfully."),
+      );
+  },
+);
+
+export const getAllCategoriesForAdmin = asyncHandler(
+  async (req: Request, res: Response) => {
+    const categories = await categoryModel.findAll({
+      order: [["createdAt", "DESC"]],
+    });
+
+    if (!categories.length) {
+      throw new ApiError(404, "No categories available.");
+    }
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(categories, "Categories retrieved successfully."),
       );
   },
 );

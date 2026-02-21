@@ -8,6 +8,8 @@ import {
   getCategoryById,
   deleteCategory,
   isDisableCategory,
+  updateCategory,
+  getAllCategoriesForAdmin,
 } from "../controllers/categoryController";
 
 const router = Router();
@@ -17,10 +19,10 @@ const router = Router();
 // =============================================
 
 // Get all categories : GET
-// router.get("/categories", getAllCategories);
+router.get("/categories", getAllCategories);
 
 // Get single category by ID : GET
-// router.get("cat/:id",  getCategoryById);
+router.get("/single-category/:categoryId", getCategoryById);
 
 // =============================================
 // 👑 ADMIN ROUTES (Protected)
@@ -34,18 +36,21 @@ router.post(
   createCategory,
 );
 
-// Soft delete category : DELETE
-// router.delete(
-//   "/:id",
-//   adminAuth,
-//   deleteCategory,
-// );
+// Delete category (Hard delete) : DELETE
+router.delete("/delete-category/:categoryId", adminAuth, deleteCategory);
 
-// Enable / Disable category : PATCH
-// router.patch(
-//   "/:id/status",
-//   adminAuth,
-//   isDisableCategory,
-// );
+// Soft delete category (Disable) : PUT
+router.put("/isDisabled-category/:categoryId", adminAuth, isDisableCategory);
+
+// Update category details : PUT
+router.put(
+  "/update-category/:categoryId",
+  adminAuth,
+  upload.single("categoryImage"),
+  updateCategory,
+);
+
+// Get all categories (including disabled) for admin : GET
+router.get("/categoriesForAdmin", adminAuth, getAllCategoriesForAdmin);
 
 export default router;
