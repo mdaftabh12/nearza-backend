@@ -16,14 +16,14 @@ export const createCategory = asyncHandler(
     };
     let categoryImage: string | null = null;
 
-    if (req?.file) {
-      const uploadResult = await uploadOnCloudinary(req?.file?.path);
-      categoryImage = uploadResult?.url || null;
+    if (req.file?.path) {
+      const uploadResult = await uploadOnCloudinary(req.file.path);
+      categoryImage = uploadResult?.secure_url || null;
     }
 
     const category = await categoryModel.create({
       name,
-      description: description || null,
+      description: description?.trim() || null,
       categoryImage,
     });
 

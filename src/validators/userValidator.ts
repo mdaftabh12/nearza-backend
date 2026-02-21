@@ -10,64 +10,68 @@ enum UserStatusEnum {
 // =============================================
 // 📩 Send OTP Request Validator
 // =============================================
-export const sendOtpSchema = z
-  .object({
-    email: z
-      .string()
-      .email({ message: "Please enter a valid email address" })
-      .regex(
-        /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|org|in|net|edu|gov|co\.in|co\.uk)$/,
-        "Email must end with valid domain extensions like .com, .org, .in, .net, .edu, .gov",
-      )
-      .optional()
-      .or(z.literal("")),
+export const sendOtpSchema = z.object({
+  body: z
+    .object({
+      email: z
+        .string()
+        .email({ message: "Please enter a valid email address" })
+        .regex(
+          /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|org|in|net|edu|gov|co\.in|co\.uk)$/,
+          "Email must end with valid domain extensions like .com, .org, .in, .net, .edu, .gov",
+        )
+        .optional()
+        .transform((v) => (v === "" ? undefined : v)),
 
-    phone: z
-      .string()
-      .regex(
-        /^[6-9][0-9]{9}$/,
-        "Phone number must be a valid 10-digit Indian mobile number starting with 6-9",
-      )
-      .optional()
-      .or(z.literal("")),
-  })
-  .refine((data) => data.email || data.phone, {
-    message: "Either email or phone is required to generate OTP",
-  })
-  .refine((data) => !(data.email && data.phone), {
-    message: "Provide only one: email OR phone, not both",
-  });
+      phone: z
+        .string()
+        .regex(
+          /^[6-9][0-9]{9}$/,
+          "Phone number must be valid 10-digit Indian mobile number",
+        )
+        .optional()
+        .transform((v) => (v === "" ? undefined : v)),
+    })
+    .refine((data) => data.email || data.phone, {
+      message: "Either email or phone is required to generate OTP",
+    })
+    .refine((data) => !(data.email && data.phone), {
+      message: "Provide only one: email OR phone, not both",
+    }),
+});
 
 // =============================================
 // 🔐 Verify OTP & Authenticate Validator
 // =============================================
 
-export const verifyOtpSchema = z
-  .object({
-    email: z
-      .string()
-      .email({ message: "Please enter a valid email address" })
-      .regex(
-        /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|org|in|net|edu|gov|co\.in|co\.uk)$/,
-        "Email must end with valid domain extensions like .com, .org, .in, .net, .edu, .gov",
-      )
-      .optional()
-      .transform((v) => (v === "" ? undefined : v)),
+export const verifyOtpSchema = z.object({
+  body: z
+    .object({
+      email: z
+        .string()
+        .email({ message: "Please enter a valid email address" })
+        .regex(
+          /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|org|in|net|edu|gov|co\.in|co\.uk)$/,
+          "Email must end with valid domain extensions like .com, .org, .in, .net, .edu, .gov",
+        )
+        .optional()
+        .transform((v) => (v === "" ? undefined : v)),
 
-    phone: z
-      .string()
-      .regex(/^[6-9][0-9]{9}$/, "Phone number must be 10 digits")
-      .optional()
-      .transform((v) => (v === "" ? undefined : v)),
+      phone: z
+        .string()
+        .regex(/^[6-9][0-9]{9}$/, "Phone number must be valid 10 digits ")
+        .optional()
+        .transform((v) => (v === "" ? undefined : v)),
 
-    otp: z.string().regex(/^[0-9]{6}$/, "OTP must be exactly 6 digits"),
-  })
-  .refine((data) => data.email || data.phone, {
-    message: "Either email or phone is required to verify OTP",
-  })
-  .refine((data) => !(data.email && data.phone), {
-    message: "Provide only one: email OR phone",
-  });
+      otp: z.string().regex(/^[0-9]{6}$/, "OTP must be exactly 6 digits"),
+    })
+    .refine((data) => data.email || data.phone, {
+      message: "Either email or phone is required to verify OTP",
+    })
+    .refine((data) => !(data.email && data.phone), {
+      message: "Provide only one: email OR phone, not both",
+    }),
+});
 
 // =============================================
 // 📝 Complete User Profile Validator

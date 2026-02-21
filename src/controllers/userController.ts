@@ -16,32 +16,24 @@ import {
 // 📩 Send OTP Controller
 // =============================================
 export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
-  const { email, phone }: { email?: string; phone?: string } = req.body || {};
-
-  // 🛑 Safety check
-  if (!email && !phone) {
-    throw new ApiError(
-      400,
-      "Please provide either an email address or a phone number.",
-    );
-  }
-
-  if (email && phone) {
-    throw new ApiError(400, "Please provide either email or phone, not both.");
-  }
+  const { email, phone } = req.body as {
+    email?: string;
+    phone?: string;
+  };
 
   // Generate OTP
   const otp = generateOTP();
-  const OTP_EXPIRY_TIME = 5 * 60 * 1000; // OTP will expire after 5 minutes
+  const OTP_EXPIRY_TIME =
+    parseInt(process.env.OTP_EXPIRY_MINUTES || "5") * 60 * 1000; // OTP will expire after 5 minutes
 
-  const createOtp = await otpModel.create({
+  const otpData = await otpModel.create({
     ...(email && { email }),
     ...(phone && { phone }),
     otp,
     expiresAt: new Date(Date.now() + OTP_EXPIRY_TIME),
   });
 
-  if (!createOtp) {
+  if (!otpData) {
     throw new ApiError(500, "Failed to generate OTP. Please try again.");
   }
 
@@ -52,7 +44,7 @@ export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
       {
         email,
         phone,
-        otp, // ⚠️ DEV ONLY
+        otp, // ⚠️ DEV ONLY (remove in production)
       },
       "A one-time verification code has been sent successfully.",
     ),

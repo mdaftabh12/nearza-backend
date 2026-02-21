@@ -1,5 +1,6 @@
 import { v2 as cloudinary, UploadApiResponse } from "cloudinary";
 import fs from "fs";
+import { ApiError } from "../utils/ApiError";
 
 // Configure cloudinary
 cloudinary.config({
@@ -15,15 +16,19 @@ export const uploadOnCloudinary = async (
   localFilePath: string,
 ): Promise<UploadApiResponse | null> => {
   try {
-    if (!localFilePath) return null;
-
+    if (!localFilePath) {
+      throw new ApiError(400, "Local file path is missing");
+    }
+    
     const response = await cloudinary.uploader.upload(localFilePath, {
       resource_type: "auto",
-      folder: process.env.CLOUDINARY_FOLDER_NAME,
+      folder: process.env.CLOUDINARY_FOLDER_NAME || "nearza",
     });
 
     // delete local file after upload
-    fs.unlinkSync(localFilePath);
+    if (fs.existsSync(localFilePath)) {
+      fs.unlinkSync(localFilePath);
+    }
 
     return response;
   } catch (error) {

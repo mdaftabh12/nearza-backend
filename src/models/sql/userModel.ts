@@ -60,7 +60,7 @@ User.init(
 
     phone: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
       validate: {
         len: [10, 10],
       },

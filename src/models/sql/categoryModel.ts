@@ -38,7 +38,7 @@ Category.init(
       unique: true,
       validate: {
         notEmpty: true,
-        len: [2, 150],
+        len: [2, 150,],
       },
       set(value: string) {
         const cleaned = value.trim().toLowerCase();

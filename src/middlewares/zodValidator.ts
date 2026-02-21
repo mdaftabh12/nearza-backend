@@ -11,6 +11,9 @@ export const validate =
         query: req.query,
       }) as { body?: any; params?: any; query?: any };
 
+      // console.log("Validated Result:", result);   // ✅ log full result
+      // console.log("Validated Body:", result.body); // ✅ log only body
+
       req.body = result.body ?? req.body;
       req.params = result.params ?? req.params;
       Object.assign(req.query, result.query ?? req.query);
