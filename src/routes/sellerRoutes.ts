@@ -3,6 +3,7 @@ import { userAuth, adminAuth, sellerAuth } from "../middlewares/auth";
 import { validate } from "../middlewares/zodValidator";
 import {
   applyForSellerAccount,
+  getMyApplication,
   getMySellerProfile,
   updateMySellerProfile,
   deleteMySellerProfile,
@@ -14,16 +15,16 @@ import {
   deleteSeller,
   restoreSeller,
 } from "../controllers/sellerController";
-import {
-  applyForSellerAccountSchema,
-  updateMySellerProfileSchema,
-  resubmitSellerApplicationSchema,
-  updateSellerStatusSchema,
-  getSellerApplicationsSchema,
-  getSellerByIdSchema,
-  deleteSellerSchema,
-  restoreSellerSchema,
-} from "../validators/sellerValidator";
+// import {
+//   applyForSellerAccountSchema,
+//   updateMySellerProfileSchema,
+//   resubmitSellerApplicationSchema,
+//   updateSellerStatusSchema,
+//   getSellerApplicationsSchema,
+//   getSellerByIdSchema,
+//   deleteSellerSchema,
+//   restoreSellerSchema,
+// } from "../validators/sellerValidator";
 
 const router = Router();
 
@@ -35,17 +36,19 @@ const router = Router();
 router.post(
   "/apply-for-seller",
   userAuth,
-  validate(applyForSellerAccountSchema),
+  // validate(applyForSellerAccountSchema),
   applyForSellerAccount,
 );
 
+router.get("/my-application", userAuth, getMyApplication);
+
 // Resubmit seller application (rejected sellers only) : POST
-router.post(
-  "/resubmit-application-for-seller",
-  userAuth,
-  validate(resubmitSellerApplicationSchema),
-  resubmitSellerApplication,
-);
+// router.post(
+//   "/resubmit-application-for-seller",
+//   userAuth,
+//   validate(resubmitSellerApplicationSchema),
+//   resubmitSellerApplication,
+// );
 
 // ==================================================
 // 🛍️ SELLER ROUTES (Seller Authentication Required)
@@ -55,18 +58,18 @@ router.post(
 router.get("/my-seller-profile", sellerAuth, getMySellerProfile);
 
 // Update seller profile (approved sellers only) : PUT
-router.put(
-  "/update-seller-profile",
-  sellerAuth,
-  validate(updateMySellerProfileSchema),
-  updateMySellerProfile,
-);
+// router.put(
+//   "/update-seller-profile",
+//   sellerAuth,
+//   validate(updateMySellerProfileSchema),
+//   updateMySellerProfile,
+// );
 
 // Soft delete seller profile (approved sellers only) : DELETE
-router.delete("/delete-seller-profile", sellerAuth, deleteMySellerProfile);
+// router.delete("/delete-seller-profile", sellerAuth, deleteMySellerProfile);
 
 // Restore soft-deleted seller profile (approved sellers only) : POST
-router.post("/restore-seller-profile", sellerAuth, restoreMySellerProfile);
+// router.post("/restore-seller-profile", sellerAuth, restoreMySellerProfile);
 
 // ================================================
 // 👑 ADMIN ROUTES (Admin Authentication Required)
@@ -76,7 +79,7 @@ router.post("/restore-seller-profile", sellerAuth, restoreMySellerProfile);
 router.get(
   "/seller-applications",
   adminAuth,
-  validate(getSellerApplicationsSchema),
+  // validate(getSellerApplicationsSchema),
   getSellerApplications,
 );
 
@@ -84,7 +87,7 @@ router.get(
 router.get(
   "/seller-profile/:sellerId",
   adminAuth,
-  validate(getSellerByIdSchema),
+  // validate(getSellerByIdSchema),
   getSellerById,
 );
 
@@ -92,24 +95,24 @@ router.get(
 router.put(
   "/update-seller-status/:sellerId",
   adminAuth,
-  validate(updateSellerStatusSchema),
+  // validate(updateSellerStatusSchema),
   updateSellerStatus,
 );
 
 // Soft delete seller profile (admin only) : DELETE
-router.delete(
-  "delete-seller/:sellerId",
-  adminAuth,
-  validate(deleteSellerSchema),
-  deleteSeller,
-);
+// router.delete(
+//   "delete-seller/:sellerId",
+//   adminAuth,
+//   validate(deleteSellerSchema),
+//   deleteSeller,
+// );
 
 // Restore soft-deleted seller profile (admin only) : POST
-router.post(
-  "/restore-seller/:sellerId",
-  adminAuth,
-  validate(restoreSellerSchema),
-  restoreSeller,
-);
+// router.post(
+//   "/restore-seller/:sellerId",
+//   adminAuth,
+//   validate(restoreSellerSchema),
+//   restoreSeller,
+// );
 
 export default router;

@@ -8,6 +8,9 @@ import {
   deleteFromCloudinary,
 } from "../services/cloudinary";
 
+// =============================================
+// 📂 Create Category (Admin)
+// =============================================
 export const createCategory = asyncHandler(
   async (req: Request, res: Response) => {
     const { name, description } = req.body as {
@@ -39,6 +42,9 @@ export const createCategory = asyncHandler(
   },
 );
 
+// =============================================
+// 📑 Get All Categories (Public)
+// =============================================
 export const getAllCategories = asyncHandler(
   async (req: Request, res: Response) => {
     const categories = await categoryModel.findAll({
@@ -56,6 +62,9 @@ export const getAllCategories = asyncHandler(
   },
 );
 
+// =============================================
+// 🔎 Get Single Category By ID
+// =============================================
 export const getCategoryById = asyncHandler(
   async (req: Request, res: Response) => {
     const categoryId = Number(req.params.categoryId);
@@ -73,6 +82,9 @@ export const getCategoryById = asyncHandler(
   },
 );
 
+// =============================================
+// 🗑️ Delete Category (Admin)
+// =============================================
 export const deleteCategory = asyncHandler(
   async (req: Request, res: Response) => {
     const categoryId = Number(req.params.categoryId);
@@ -94,6 +106,9 @@ export const deleteCategory = asyncHandler(
   },
 );
 
+// =============================================
+// 🔄 Toggle Category Status (Enable / Disable)
+// =============================================
 export const isDisableCategory = asyncHandler(
   async (req: Request, res: Response) => {
     const categoryId = Number(req.params.categoryId);
@@ -119,6 +134,9 @@ export const isDisableCategory = asyncHandler(
   },
 );
 
+// =============================================
+// ✏️ Update Category (Admin)
+// =============================================
 export const updateCategory = asyncHandler(
   async (req: Request, res: Response) => {
     const categoryId = Number(req.params.categoryId);
@@ -159,6 +177,9 @@ export const updateCategory = asyncHandler(
   },
 );
 
+// =============================================
+// 🛠️ Get All Categories (Admin View)
+// =============================================
 export const getAllCategoriesForAdmin = asyncHandler(
   async (req: Request, res: Response) => {
     const categories = await categoryModel.findAll({
@@ -171,8 +192,6 @@ export const getAllCategoriesForAdmin = asyncHandler(
 
     return res
       .status(200)
-      .json(
-        new ApiResponse(categories, "Categories retrieved successfully."),
-      );
+      .json(new ApiResponse(categories, "Categories retrieved successfully."));
   },
 );

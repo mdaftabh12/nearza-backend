@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { ValidationError, UniqueConstraintError } from "sequelize";
 import { ApiError } from "../utils/ApiError";
 
 const errorHandler = (
@@ -10,6 +11,18 @@ const errorHandler = (
   let statusCode = err.statusCode || 500;
   let message = err.message || "Internal Server Error";
   let errors = err.errors || [];
+
+  // ✅ Sequelize Validation Error
+  if (err instanceof ValidationError) {
+    statusCode = 400;
+    message = err.errors[0]?.message || "Validation failed";
+  }
+
+  // ✅ Sequelize Unique Constraint Error
+  if (err instanceof UniqueConstraintError) {
+    statusCode = 409;
+    message = err.errors[0]?.message || "Duplicate value already exists";
+  }
 
   // ✅ Mongoose validation error
   if (err.name === "ValidationError" && err.errors) {

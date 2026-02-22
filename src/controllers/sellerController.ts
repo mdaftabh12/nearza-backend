@@ -19,7 +19,6 @@ export const applyForSellerAccount = asyncHandler(
 
     const {
       storeName,
-      storeSlug,
       description,
       businessEmail,
       businessPhone,
@@ -36,7 +35,6 @@ export const applyForSellerAccount = asyncHandler(
     const newSeller = await sellerModel.create({
       userId,
       storeName,
-      storeSlug,
       description,
       businessEmail,
       businessPhone,
@@ -50,6 +48,54 @@ export const applyForSellerAccount = asyncHandler(
       .json(
         new ApiResponse(newSeller, "Seller application submitted successfully"),
       );
+  },
+);
+
+export const getMyApplication = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = Number(req.user?.id);
+
+    const applicants = await sellerModel.findOne({
+      where: { userId },
+      include: [
+        {
+          model: userModel,
+          as: "user",
+          attributes: ["email", "roles", "status"],
+        },
+      ],
+    });
+
+    if (!applicants) {
+      throw new ApiError(
+        404,
+        "You don't have a seller account yet. Please apply first.",
+      );
+    }
+
+    const statusMessages: Record<string, string> = {
+      PENDING:
+        "Your seller application is under review. We'll notify you once it's approved.",
+      REJECTED:
+        "Your seller application was rejected. Please resubmit with correct details.",
+      APPROVED: "Welcome! Your seller account is active.",
+    };
+
+    const statusCodes: Record<string, number> = {
+      PENDING: 403,
+      REJECTED: 403,
+      APPROVED: 200,
+    };
+
+    const message =
+      statusMessages[applicants.status] ?? "Unknown account status.";
+    const statusCode = statusCodes[applicants.status] ?? 400;
+
+    if (applicants.status !== "APPROVED") {
+      throw new ApiError(statusCode, message);
+    }
+
+    return res.status(200).json(new ApiResponse(applicants, message));
   },
 );
 
@@ -72,12 +118,22 @@ export const getMySellerProfile = asyncHandler(
     });
 
     if (!seller) {
-      throw new ApiError(404, "Seller profile not found");
+      throw new ApiError(
+        404,
+        "You don't have a seller account yet. Please apply first.",
+      );
+    }
+
+    if (seller.status === "SUSPENDED") {
+      throw new ApiError(
+        403,
+        "Your seller account has been suspended. Please contact support for assistance.",
+      );
     }
 
     return res
       .status(200)
-      .json(new ApiResponse(seller, "Seller profile retrieved successfully"));
+      .json(new ApiResponse(seller, "Seller profile retrieved successfully."));
   },
 );
 
@@ -182,55 +238,12 @@ export const resubmitSellerApplication = asyncHandler(
 // =============================================
 
 // =============================================
-// 🔄 Update Seller Status (Admin Only)
-// =============================================
-export const updateSellerStatus = asyncHandler(
-  async (req: Request, res: Response) => {
-    const sellerId = Number(req.params.sellerId);
-    const { status } = req.body;
-
-    const seller = await sellerModel.findByPk(sellerId);
-
-    if (!seller) {
-      throw new ApiError(404, "Seller not found");
-    }
-
-    // Update seller status using instance (better than Model.update)
-    await seller.update({ status });
-
-    const user = await userModel.findByPk(seller.userId);
-    if (!user) {
-      throw new ApiError(404, "Associated user not found");
-    }
-
-    let roles = [...(user.roles || [])];
-
-    if (status === "APPROVED") {
-      if (!roles.includes("SELLER")) {
-        roles.push("SELLER");
-      }
-    }
-
-    if (status === "REJECTED" || status === "SUSPENDED") {
-      roles = roles.filter((role) => role !== "SELLER");
-    }
-
-    await user.update({ roles });
-
-    return res
-      .status(200)
-      .json(new ApiResponse(seller, "Seller status updated successfully"));
-  },
-);
-
-// =============================================
 // 🗂️ Get Seller Applications (Admin Only)
 // =============================================
 export const getSellerApplications = asyncHandler(
   async (req: Request, res: Response) => {
     const { status, search, page = 1, limit = 10 } = req.query;
 
-    // Build where clause
     const whereClause: any = {};
 
     if (status) {
@@ -244,7 +257,6 @@ export const getSellerApplications = asyncHandler(
       ];
     }
 
-    // Calculate pagination
     const pageNumber = Number(page);
     const limitNumber = Number(limit);
     const offset = (pageNumber - 1) * limitNumber;
@@ -256,8 +268,8 @@ export const getSellerApplications = asyncHandler(
         {
           model: userModel,
           as: "user",
-          attributes: ["email"],
-          required: false, // Use LEFT JOIN to include sellers even without user data
+          attributes: ["id", "fullName", "email", "phone", "status"],
+          required: true, // ✅ INNER JOIN
         },
       ],
       limit: limitNumber,
@@ -306,6 +318,47 @@ export const getSellerById = asyncHandler(
     return res
       .status(200)
       .json(new ApiResponse(seller, "Seller profile retrieved successfully"));
+  },
+);
+
+// =============================================
+// 🔄 Update Seller Status (Admin Only)
+// =============================================
+export const updateSellerStatus = asyncHandler(
+  async (req: Request, res: Response) => {
+    const sellerId = Number(req.params.sellerId);
+    const { status } = req.body;
+
+    const seller = await sellerModel.findByPk(sellerId);
+
+    if (!seller) {
+      throw new ApiError(404, "Seller not found");
+    }
+
+    await seller.update({ status });
+
+    const user = await userModel.findByPk(seller.userId);
+    if (!user) {
+      throw new ApiError(404, "Associated user not found");
+    }
+
+    let roles = [...(user.roles || [])];
+
+    if (status === "APPROVED") {
+      if (!roles.includes("SELLER")) {
+        roles.push("SELLER");
+      }
+    }
+
+    if (status === "REJECTED" || status === "SUSPENDED") {
+      roles = roles.filter((role) => role !== "SELLER");
+    }
+
+    await user.update({ roles });
+
+    return res
+      .status(200)
+      .json(new ApiResponse(seller, "Seller status updated successfully"));
   },
 );
 

@@ -10,13 +10,14 @@ import cookieParser from "cookie-parser";
 import connectMongoDB from "./config/mongoose";
 import { connectMySQL, sequelize } from "./config/sequelize";
 import seedAdmin from "./utils/seedAdmin";
+import { associateSeller } from "./models/sql/sellerModel";
 
 // =============================================
 // 🧠 Routes Import
 // =============================================
 // SQL-based routes
 import userRoutes from "./routes/userRoutes";
-// import sellerRoutes from "./routes/sellerRoutes";
+import sellerRoutes from "./routes/sellerRoutes";
 import categoryRoutes from "./routes/categoryRoutes";
 
 // MongoDB-based routes
@@ -55,11 +56,14 @@ import errorHandler from "./middlewares/errorHandler";
     // 🔗 Connect MySQL
     await connectMySQL();
 
+    associateSeller();
+
     // 🔄 Sync Sequelize Models (safe sync)
     const isDevelopment = process.env.NODE_ENV === "development";
 
     if (isDevelopment) {
-      await sequelize.sync();
+      // await sequelize.sync({ force: true }); // ⚠️ sirf ek baar
+      await sequelize.sync(); // ✅ normal
     } else {
       await sequelize.authenticate();
     }
@@ -77,7 +81,7 @@ import errorHandler from "./middlewares/errorHandler";
 // 🌐 API Routes
 // =============================================
 app.use("/api/users", userRoutes); // User CRUD & Authentication
-// app.use("/api/sellers", sellerRoutes); // Seller application & management
+app.use("/api/sellers", sellerRoutes); // Seller application & management
 app.use("/api/categories", categoryRoutes); // Product categories
 
 // =============================================

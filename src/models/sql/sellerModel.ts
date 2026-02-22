@@ -20,7 +20,7 @@ class Seller extends Model<
 
   // 🏪 Business Info
   declare storeName: string;
-  declare storeSlug: string;
+  declare storeSlug: CreationOptional<string>;
   declare description: string | null;
 
   // 📞 Contact
@@ -71,7 +71,7 @@ Seller.init(
     },
 
     storeSlug: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING(180),
       allowNull: false,
       unique: true,
     },
@@ -95,7 +95,7 @@ Seller.init(
     },
 
     address: {
-      type: DataTypes.JSON,
+      type: DataTypes.STRING,
       allowNull: true,
     },
 
@@ -135,7 +135,20 @@ Seller.init(
         fields: ["storeSlug"],
       },
     ],
-  }
+
+    hooks: {
+      beforeValidate: (seller) => {
+        if (seller.storeName) {
+          seller.storeSlug = seller.storeName
+            .toLowerCase()
+            .trim()
+            .replace(/[^a-z0-9\s-]/g, "")
+            .replace(/\s+/g, "-")
+            .replace(/-+/g, "-");
+        }
+      },
+    },
+  },
 );
 
 // 🔗 Association (call this in index.ts after all models loaded)

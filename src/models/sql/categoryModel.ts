@@ -8,7 +8,7 @@ import {
 import { sequelize } from "../../config/sequelize";
 
 class Category extends Model<
-  InferAttributes<Category, { omit: "createdAt" | "updatedAt" }>,
+  InferAttributes<Category, { omit: "createdAt" | "updatedAt" | "deletedAt" }>,
   InferCreationAttributes<Category, { omit: "createdAt" | "updatedAt" }>
 > {
   declare id: CreationOptional<number>;
@@ -38,7 +38,7 @@ Category.init(
       unique: true,
       validate: {
         notEmpty: true,
-        len: [2, 150,],
+        len: [2, 150],
       },
       set(value: string) {
         const cleaned = value.trim().toLowerCase();
@@ -65,10 +65,6 @@ Category.init(
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,
-    },
-    deletedAt: {
-      type: DataTypes.DATE,
-      allowNull: true,
     },
   },
   {
