@@ -1,62 +1,273 @@
-// Create a new product : Only seller 
-    // 1. Seller authentication and authorization
-    // 2. Validate product data (name, description, price, etc.)
-    // 3. Handle product images (upload to cloud storage)
-    // 4. Save product details in the database
-    // 5. Return success response with product details
-    
-// Get all products with pagination and filtering : Public route
-    // 1. Parse query parameters for pagination (page, limit) and filtering (category, price range, etc.)
-    // 2. Fetch products from the database based on filters and pagination
-    // 3. Return products in the response along with pagination info
+import { Request, Response } from "express";
+import fs from "fs";
+import { productModel } from "../models/sql/productModel";
+import { ApiError } from "../utils/ApiError";
+import { ApiResponse } from "../utils/ApiResponse";
+import asyncHandler from "../utils/asyncHandler";
+import {
+  uploadOnCloudinary,
+  deleteFromCloudinary,
+} from "../services/cloudinary";
+import { Op } from "sequelize";
 
-// Get single product details by ID : Public route (only active products)
-    // 1. Validate product ID
-    // 2. Fetch product details from the database
-    // 3. Return product details in the response
+export const createProduct = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { name, description, price, categoryId, stock } = req.body as {
+      name: string;
+      description: string;
+      price: number;
+      categoryId?: number;
+      stock?: number;
+    };
 
-// Get single product details by ID for seller : Only seller can access their own product details
-    // 1. Seller authentication and authorization
-    // 2. Validate product ID
-    // 3. Fetch product details from the database if it belongs to the authenticated seller
-    // 4. Return product details in the response
+    const sellerId = Number(req.user?.id);
 
-// Get products by seller ID : Only seller can access their own products
-    // 1. Seller authentication and authorization
-    // 2. Validate seller ID
-    // 3. Fetch products from the database that belong to the specified seller
-    // 4. Return products in the response
+    if (!sellerId) throw new ApiError(401, "Unauthorized");
 
-// Get products by category ID : Public route (only active products)
-    // 1. Validate category ID
-    // 2. Fetch products from the database that belong to the specified category and are active
-    // 3. Return products in the response
+    let imageUrls: string[] = [];
 
-// Update product details : Only seller can update their own products
-    // 1. Seller authentication and authorization
-    // 2. Validate product ID and update data
-    // 3. Fetch product from the database and check if it belongs to the authenticated seller
-    // 4. Update product images if new images are provided (handle upload to cloud storage and delete old images)
-    // 5. Update product details in the database
-    // 6. Return success response with updated product details
+    if (req.files && Array.isArray(req.files)) {
+      for (const file of req.files) {
+        const result = await uploadOnCloudinary(file.path);
+        if (!result?.secure_url) {
+          throw new ApiError(500, "Image upload failed");
+        }
+        imageUrls.push(result.secure_url);
+        fs.unlinkSync(file.path);
+      }
+    }
 
-// Delete a product : Only seller can delete their own products
-    // 1. Seller authentication and authorization
-    // 2. Validate product ID
-    // 3. Fetch product from the database and check if it belongs to the authenticated seller
-    // 4. Soft delete the product in the database (mark as inactive or deleted)
-    // 5. Return success response confirming deletion
+    const product = await productModel.create({
+      name,
+      description,
+      price: Number(price),
+      categoryId: categoryId,
+      sellerId,
+      stock: stock ? Number(stock) : 0,
+      productImage: imageUrls,
+    });
 
-// Hard delete a product : Only admin can hard delete any product
-    // 1. Admin authentication and authorization
-    // 2. Validate product ID
-    // 3. Fetch product from the database
-    // 4. Permanently delete the product from the database
-    // 5. Return success response confirming hard deletion
+    return res
+      .status(201)
+      .json(new ApiResponse(product, "Product created successfully"));
+  },
+);
 
-// Restore a soft-deleted product : Only seller can restore their own products
-    // 1. Seller authentication and authorization
-    // 2. Validate product ID
-    // 3. Fetch product from the database and check if it belongs to the authenticated seller
-    // 4. Restore the soft-deleted product in the database (mark as active)
-    // 5. Return success response confirming restoration
+export const getAllProducts = asyncHandler(
+  async (req: Request, res: Response) => {
+    const {
+      page = "1",
+      limit = "10",
+      categoryId,
+      minPrice,
+      maxPrice,
+    } = req.query;
+
+    const where: any = { isActive: true };
+
+    if (categoryId) {
+      where.categoryId = Number(categoryId);
+    }
+
+    if (minPrice || maxPrice) {
+      where.price = {};
+      if (minPrice) where.price[Op.gte] = Number(minPrice);
+      if (maxPrice) where.price[Op.lte] = Number(maxPrice);
+    }
+
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
+
+    const { rows, count } = await productModel.findAndCountAll({
+      where,
+      limit: limitNumber,
+      offset: (pageNumber - 1) * limitNumber,
+      order: [["createdAt", "DESC"]],
+    });
+
+    return res.json(
+      new ApiResponse(
+        {
+          products: rows,
+          pagination: {
+            total: count,
+            page: pageNumber,
+            limit: limitNumber,
+            totalPages: Math.ceil(count / limitNumber),
+          },
+        },
+        "Products fetched successfully",
+      ),
+    );
+  },
+);
+
+export const getProductById = asyncHandler(
+  async (req: Request, res: Response) => {
+    const productId = Number(req.params.id);
+    const product = await productModel.findOne({
+      where: { id: productId, isActive: true },
+    });
+
+    if (!product) {
+      throw new ApiError(404, "Product not found");
+    }
+
+    return res.json(
+      new ApiResponse(product, "Product details fetched successfully"),
+    );
+  },
+);
+
+export const getProductDetailsForSeller = asyncHandler(
+  async (req: Request, res: Response) => {
+    const productId = Number(req.params.id);
+    const sellerId = Number(req.user?.id);
+    const product = await productModel.findOne({
+      where: { id: productId, sellerId },
+    });
+
+    if (!product) {
+      throw new ApiError(404, "Product not found or access denied");
+    }
+
+    return res.json(
+      new ApiResponse(product, "Product details fetched successfully"),
+    );
+  },
+);
+
+export const getProductsBySellerId = asyncHandler(
+  async (req: Request, res: Response) => {
+    const sellerId = Number(req.params.sellerId);
+    const authenticatedSellerId = Number(req.user?.id);
+    if (sellerId !== authenticatedSellerId) {
+      throw new ApiError(
+        403,
+        "Access denied. You can only view your own products.",
+      );
+    }
+    const products = await productModel.findAll({
+      where: { sellerId },
+    });
+
+    return res.json(new ApiResponse(products, "Products fetched successfully"));
+  },
+);
+
+export const getProductsByCategoryId = asyncHandler(
+  async (req: Request, res: Response) => {
+    const categoryId = Number(req.params.categoryId);
+    const products = await productModel.findAll({
+      where: { categoryId, isActive: true },
+    });
+
+    return res.json(new ApiResponse(products, "Products fetched successfully"));
+  },
+);
+
+export const updateProduct = asyncHandler(
+  async (req: Request, res: Response) => {
+    const productId = Number(req.params.id);
+    const sellerId = Number(req.user?.id);
+
+    const product = await productModel.findOne({
+      where: { id: productId, sellerId },
+    });
+
+    if (!product) {
+      throw new ApiError(404, "Product not found or access denied");
+    }
+
+    let imageUrls = product.productImage || [];
+
+    if (req.files && Array.isArray(req.files)) {
+      // Delete old images
+      for (const url of imageUrls) {
+        await deleteFromCloudinary(url);
+      }
+
+      imageUrls = [];
+
+      for (const file of req.files) {
+        const result = await uploadOnCloudinary(file.path);
+        if (!result?.secure_url) {
+          throw new ApiError(500, "Image upload failed");
+        }
+        imageUrls.push(result.secure_url);
+        fs.unlinkSync(file.path);
+      }
+    }
+
+    await product.update({
+      name: req.body.name ?? product.name,
+      description: req.body.description ?? product.description,
+      price:
+        req.body.price !== undefined ? Number(req.body.price) : product.price,
+      categoryId:
+        req.body.categoryId !== undefined
+          ? Number(req.body.categoryId)
+          : product.categoryId,
+      stock:
+        req.body.stock !== undefined ? Number(req.body.stock) : product.stock,
+      productImage: imageUrls,
+    });
+
+    return res.json(new ApiResponse(product, "Product updated successfully"));
+  },
+);
+
+export const deleteProduct = asyncHandler(
+  async (req: Request, res: Response) => {
+    const productId = Number(req.params.id);
+    const sellerId = Number(req.user?.id);
+    const product = await productModel.findOne({
+      where: { id: productId, sellerId },
+    });
+
+    if (!product) {
+      throw new ApiError(404, "Product not found or access denied");
+    }
+    await product.update({ isActive: false });
+    return res.json(new ApiResponse(null, "Product deleted successfully"));
+  },
+);
+
+export const hardDeleteProduct = asyncHandler(
+  async (req: Request, res: Response) => {
+    const productId = Number(req.params.id);
+
+    const product = await productModel.findByPk(productId);
+
+    if (!product) {
+      throw new ApiError(404, "Product not found");
+    }
+
+    // delete cloud images
+    const images = product.productImage || [];
+    for (const url of images) {
+      await deleteFromCloudinary(url);
+    }
+
+    await product.destroy();
+
+    return res.json(new ApiResponse(null, "Product permanently deleted"));
+  },
+);
+
+export const restoreProduct = asyncHandler(
+  async (req: Request, res: Response) => {
+    const productId = Number(req.params.id);
+    const sellerId = Number(req.user?.id);
+    const product = await productModel.findOne({
+      where: { id: productId, sellerId, isActive: false },
+    });
+
+    if (!product) {
+      throw new ApiError(404, "Product not found or access denied");
+    }
+
+    await product.update({ isActive: true });
+    return res.json(new ApiResponse(product, "Product restored successfully"));
+  },
+);

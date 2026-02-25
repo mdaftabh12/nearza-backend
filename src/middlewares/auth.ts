@@ -44,7 +44,7 @@ export const userAuth = asyncHandler(
         );
       }
 
-      req.user = decoded; // ✅ TS happy
+      req.user = decoded;
       next();
     } catch (error: any) {
       if (error.message === "Token has expired") {
