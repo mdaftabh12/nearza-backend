@@ -22,7 +22,7 @@ const seedAdmin = async (): Promise<void> => {
 
       console.log(`✅ Default Admin Created: ${admin.email}`);
     } else {
-      console.log(`ℹ️ Admin already exists: ${existingAdmin.email}`);
+      console.log(`ℹ️  Admin already exists: ${existingAdmin.email}`);
     }
   } catch (error: any) {
     console.error("❌ Error creating default admin:", error.message);

@@ -23,13 +23,20 @@ class Product extends Model<
   // 📦 Product Info
   declare name: string;
   declare slug: CreationOptional<string>;
+  declare sku: string;
   declare description: string;
+
   declare price: number;
   declare discountPrice: CreationOptional<number | null>;
+  declare finalPrice: number;
+
   declare brand: CreationOptional<string | null>;
   declare productImage: CreationOptional<string[]>;
+
   declare stock: number;
+  declare status: CreationOptional<"DRAFT" | "PUBLISHED">;
   declare isActive: CreationOptional<boolean>;
+
   declare ratings: CreationOptional<number>;
   declare totalReviews: CreationOptional<number>;
 
@@ -42,20 +49,20 @@ class Product extends Model<
 Product.init(
   {
     id: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.INTEGER.UNSIGNED,
       autoIncrement: true,
       primaryKey: true,
     },
 
     sellerId: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.INTEGER.UNSIGNED,
       allowNull: false,
       references: { model: "sellers", key: "id" },
       onDelete: "CASCADE",
     },
 
     categoryId: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.INTEGER.UNSIGNED,
       allowNull: true,
       references: { model: "categories", key: "id" },
       onDelete: "SET NULL",
@@ -68,8 +75,12 @@ Product.init(
 
     slug: {
       type: DataTypes.STRING,
-      allowNull: true,
       unique: true,
+    },
+    sku: { 
+      type: DataTypes.STRING, 
+      unique: true, 
+      allowNull: false 
     },
 
     description: {
@@ -87,9 +98,10 @@ Product.init(
       allowNull: true,
     },
 
+    finalPrice: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
+
     brand: {
       type: DataTypes.STRING,
-      allowNull: true,
     },
 
     productImage: {
@@ -99,13 +111,15 @@ Product.init(
 
     stock: {
       type: DataTypes.INTEGER,
-      allowNull: false,
       defaultValue: 0,
     },
-
-    isActive: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: true,
+    status: {
+      type: DataTypes.ENUM("DRAFT", "PUBLISHED"),
+      defaultValue: "DRAFT",
+    },
+    isActive: { 
+      type: DataTypes.BOOLEAN, 
+      defaultValue: false 
     },
 
     ratings: {
@@ -139,7 +153,7 @@ Product.init(
     },
 
     indexes: [
-      { fields: ["sellerId"] }, 
+      { fields: ["sellerId"] },
       { fields: ["categoryId"] },
       { fields: ["isActive"] },
       { fields: ["price"] },
