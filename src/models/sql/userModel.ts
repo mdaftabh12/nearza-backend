@@ -26,9 +26,6 @@ class User extends Model<
   declare status: CreationOptional<UserStatus>;
 
   declare profileImage: CreationOptional<string | null>;
-  declare cart: CreationOptional<unknown[]>;
-  declare wishlist: CreationOptional<unknown[]>;
-  declare addresses: CreationOptional<unknown[]>;
   declare refreshToken: CreationOptional<string | null>;
 
   // timestamps
@@ -87,21 +84,6 @@ User.init(
     profileImage: {
       type: DataTypes.STRING,
       allowNull: true,
-    },
-
-    cart: {
-      type: DataTypes.JSON,
-      defaultValue: [],
-    },
-
-    wishlist: {
-      type: DataTypes.JSON,
-      defaultValue: [],
-    },
-
-    addresses: {
-      type: DataTypes.JSON,
-      defaultValue: [],
     },
 
     refreshToken: {

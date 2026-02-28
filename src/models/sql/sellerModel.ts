@@ -152,12 +152,12 @@ Seller.init(
 );
 
 // 🔗 Association (call this in index.ts after all models loaded)
-export const associateSeller = () => {
-  Seller.belongsTo(userModel, {
-    foreignKey: "userId",
-    as: "user",
-  });
-};
+// export const associateSeller = () => {
+//   Seller.belongsTo(userModel, {
+//     foreignKey: "userId",
+//     as: "user",
+//   });
+// };
 
 export const sellerModel = Seller;
 export default Seller;

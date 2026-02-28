@@ -163,13 +163,13 @@ Product.init(
   },
 );
 
-export const associateProduct = () => {
-  Product.belongsTo(sellerModel, { foreignKey: "sellerId", as: "seller" });
-  Product.belongsTo(categoryModel, {
-    foreignKey: "categoryId",
-    as: "category",
-  });
-};
+// export const associateProduct = () => {
+//   Product.belongsTo(sellerModel, { foreignKey: "sellerId", as: "seller" });
+//   Product.belongsTo(categoryModel, {
+//     foreignKey: "categoryId",
+//     as: "category",
+//   });
+// };
 
 export const productModel = Product;
 export default Product;

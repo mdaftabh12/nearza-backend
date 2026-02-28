@@ -10,8 +10,7 @@ import cookieParser from "cookie-parser";
 import connectMongoDB from "./config/mongoose";
 import { connectMySQL, sequelize } from "./config/sequelize";
 import seedAdmin from "./utils/seedAdmin";
-import { associateSeller } from "./models/sql/sellerModel";
-import associateProduct from "./models/sql/sellerModel";
+import "./models/sql/associations";
 
 // =============================================
 // 🧠 Routes Import
@@ -21,6 +20,10 @@ import userRoutes from "./routes/userRoutes";
 import sellerRoutes from "./routes/sellerRoutes";
 import categoryRoutes from "./routes/categoryRoutes";
 import productRoutes from "./routes/productRoutes";
+import cartRoutes from "./routes/cartRoutes";
+import cartItemRoutes from "./routes/cartItemRoutes";
+import wishlistRoutes from "./routes/wishlistRoutes";
+
 
 // MongoDB-based routes
 // import userRoutes from "./src/routes/userRoutes";
@@ -58,9 +61,6 @@ import errorHandler from "./middlewares/errorHandler";
     // 🔗 Connect MySQL
     await connectMySQL();
 
-    associateSeller();
-    associateProduct;
-
     // 🔄 Sync Sequelize Models (safe sync)
     const isDevelopment = process.env.NODE_ENV === "development";
 
@@ -86,7 +86,10 @@ import errorHandler from "./middlewares/errorHandler";
 app.use("/api/users", userRoutes); // User CRUD & Authentication
 app.use("/api/sellers", sellerRoutes); // Seller application & management
 app.use("/api/categories", categoryRoutes); // Product categories
-app.use("/api/products", productRoutes);
+app.use("/api/products", productRoutes); // Product CRUD & listing
+app.use("/api/carts", cartRoutes); // Cart management
+app.use("/api/cart-items", cartItemRoutes); // Cart item management
+app.use("/api/wishlist", wishlistRoutes); // Wishlist management
 
 // =============================================
 // 💚 Health Check Route
