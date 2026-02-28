@@ -1,9 +1,11 @@
 import jwt, { JwtPayload, Secret, SignOptions } from "jsonwebtoken";
+import { ApiError } from "../utils/ApiError";
 
 interface JwtUserPayload {
   id: string | number;
   email?: string;
-  roles?: string[] | string;
+  phone?: string;
+  roles?: string[];
 }
 
 // =============================================
@@ -11,27 +13,25 @@ interface JwtUserPayload {
 // =============================================
 export const generateToken = (user: JwtUserPayload): string => {
   if (!user?.id) {
-    throw new Error("User object with id is required to generate token");
+    throw new ApiError(
+      400,
+      "Unable to generate access token. Invalid user information provided.",
+    );
   }
 
   const jwtSecret = process.env.JWT_SECRET as Secret;
   if (!jwtSecret) {
-    throw new Error("JWT_SECRET is not defined");
+    throw new ApiError(
+      500,
+      "Server configuration error. Please try again later.",
+    );
   }
 
   const options: SignOptions = {
     expiresIn: (process.env.JWT_EXPIRES_IN ?? "1d") as SignOptions["expiresIn"],
   };
 
-  return jwt.sign(
-    {
-      id: user.id,
-      email: user.email,
-      roles: user.roles,
-    },
-    jwtSecret,
-    options
-  );
+  return jwt.sign(user, jwtSecret, options);
 };
 
 // =============================================
@@ -39,23 +39,38 @@ export const generateToken = (user: JwtUserPayload): string => {
 // =============================================
 export const verifyToken = (token: string): JwtPayload => {
   if (!token) {
-    throw new Error("Token is required for verification");
+    throw new ApiError(
+      401,
+      "Access token is required. Please log in to continue.",
+    );
   }
 
   const jwtSecret = process.env.JWT_SECRET as Secret;
   if (!jwtSecret) {
-    throw new Error("JWT_SECRET is not defined");
+    throw new ApiError(
+      500,
+      "Server configuration error. Please try again later.",
+    );
   }
 
   try {
     return jwt.verify(token, jwtSecret) as JwtPayload;
   } catch (error: any) {
     if (error.name === "JsonWebTokenError") {
-      throw new Error("Invalid token");
+      throw new ApiError(
+        401,
+        "Invalid authentication token. Please log in again.",
+      );
     }
     if (error.name === "TokenExpiredError") {
-      throw new Error("Token has expired");
+      throw new ApiError(
+        401,
+        "Your session has expired. Please log in again to continue.",
+      );
     }
-    throw error;
+    throw new ApiError(
+      500,
+      "Token verification failed. Please try again later.",
+    );
   }
 };

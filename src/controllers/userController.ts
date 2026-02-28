@@ -56,16 +56,12 @@ export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
 // =============================================
 export const verifyOtpAndAuthenticate = asyncHandler(
   async (req: Request, res: Response) => {
-    const { email, phone, otp } = req.body || {};
+    const { email, phone, otp } = req.body as {
+      email?: string;
+      phone?: string;
+      otp: string;
+    };
     const currentTime = new Date();
-
-    // 🛑 Safety check
-    if (email && phone) {
-      throw new ApiError(
-        400,
-        "Please provide either an email address or a phone number.",
-      );
-    }
 
     // 🔍 Find latest OTP record
     const otpQuery = email ? { email, otp } : { phone, otp };
@@ -82,22 +78,52 @@ export const verifyOtpAndAuthenticate = asyncHandler(
       );
     }
 
-    // 🧾 User lookup condition
+    // 👤 Include soft-deleted users
     const userWhere = email ? { email } : { phone };
 
     // 👤 Check user (SQL)
-    let user = await userModel.findOne({ where: userWhere });
+    let user = await userModel.findOne({
+      where: userWhere,
+      paranoid: false,
+    });
+
     let isNewUser = false;
 
+    // 🆕 If user not found → create
     if (!user) {
       isNewUser = true;
 
-      // 🆕 Create new user with provided credentials
       user = await userModel.create({
-        fullName: "Guest", // ✅ safe default
-        email: email || `guest${Date.now()}@example.com`,
-        phone: phone || "0000000000",
+        email: email || null,
+        phone: phone || null,
       });
+    }
+
+    // ♻️ If user was soft deleted → restore automatically
+    if (user.deletedAt) {
+      const deletedTime = new Date(user.deletedAt).getTime();
+      const now = Date.now();
+
+      const hours24 = 24 * 60 * 60 * 1000;
+      const days30 = 30 * 24 * 60 * 60 * 1000;
+
+      const timeSinceDelete = now - deletedTime;
+
+      // ❌ Block restore within 24 hours
+      if (timeSinceDelete < hours24) {
+        throw new ApiError(
+          403,
+          "Your account was recently deleted. You can restore it after 24 hours.",
+        );
+      }
+
+      // ❌ If more than 30 days → block login
+      if (timeSinceDelete > days30) {
+        throw new ApiError(403, "Your account has been permanently deleted.");
+      }
+
+      // ✅ Restore if between 24h and 30 days
+      await user.restore();
     }
 
     // 🚫 STATUS CHECK (IMPORTANT PART)
@@ -125,11 +151,12 @@ export const verifyOtpAndAuthenticate = asyncHandler(
     // 🔑 Generate auth token
     const authToken = generateToken({
       id: String(user.id),
-      email: user.email,
+      ...(user.email ? { email: user.email } : {}),
+      ...(user.phone ? { phone: user.phone } : {}),
       roles: user.roles,
     });
 
-    // 🧹 Delete OTP
+    // 🧹 Delete OTP records
     await otpModel.deleteMany(email ? { email } : { phone });
 
     // 🍪 Set token cookie
@@ -177,7 +204,9 @@ export const getUserProfile = asyncHandler(
 
     return res
       .status(200)
-      .json(new ApiResponse(user, "User profile retrieved successfully."));
+      .json(
+        new ApiResponse(user, "Your profile has been retrieved successfully."),
+      );
   },
 );
 
@@ -198,7 +227,7 @@ export const completeUserProfile = asyncHandler(
       throw new ApiError(404, "The requested user account could not be found.");
     }
 
-    const { fullName, email, phone, addresses } = req.body || {};
+    const { fullName, email, phone } = req.body || {};
     const updateData: any = {};
 
     // ========= Image Handling =========
@@ -224,15 +253,6 @@ export const completeUserProfile = asyncHandler(
     if (fullName) updateData.fullName = fullName;
     if (email) updateData.email = email;
     if (phone) updateData.phone = phone;
-    if (addresses) updateData.addresses = addresses;
-
-    // ========= Ensure at least one field =========
-    if (Object.keys(updateData).length === 0) {
-      throw new ApiError(
-        400,
-        "Please provide at least one field to update your profile.",
-      );
-    }
 
     await user.update(updateData);
 
@@ -276,44 +296,21 @@ export const deleteAccount = asyncHandler(
       throw new ApiError(404, "The requested user account could not be found.");
     }
 
+    // Soft delete the user
     await user.destroy();
+
+    // Optional: clear refresh token
+    await user.update({ refreshToken: null });
+
     res.clearCookie("token", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
     });
+
     return res
       .status(200)
       .json(new ApiResponse("Your account has been deleted successfully."));
-  },
-);
-
-// =============================================
-// ♻️ Restore My User Profile
-// =============================================
-export const restoreMyProfile = asyncHandler(
-  async (req: Request, res: Response) => {
-    const userId = req.user?.id;
-
-    if (!userId) {
-      throw new ApiError(401, "You are not authorized to perform this action.");
-    }
-    const user = await userModel.findOne({
-      where: { id: userId },
-      paranoid: false, // Include soft-deleted records
-    });
-
-    if (!user) {
-      throw new ApiError(404, "The requested user account could not be found.");
-    }
-
-    await user.restore();
-
-    return res
-      .status(200)
-      .json(
-        new ApiResponse(user, "Your account has been restored successfully."),
-      );
   },
 );
 

@@ -5,6 +5,7 @@ import { categoryModel } from "./categoryModel";
 import { cartModel } from "./cartModel";
 import { cartItemModel } from "./cartItemModel";
 import { wishlistModel } from "./wishlistModel";
+import { addressModel } from "./addressModel";
 
 /* =======================================================
    USER ↔ SELLER
@@ -139,4 +140,20 @@ productModel.hasMany(wishlistModel, {
 wishlistModel.belongsTo(productModel, {
   foreignKey: "productId",
   as: "product",
+});
+
+/* =======================================================
+   USER ↔ ADDRESS
+   1 User → Many Addresses
+======================================================= */
+
+userModel.hasMany(addressModel, {
+  foreignKey: "userId",
+  as: "addresses",
+  onDelete: "CASCADE",
+});
+
+addressModel.belongsTo(userModel, {
+  foreignKey: "userId",
+  as: "user",
 });

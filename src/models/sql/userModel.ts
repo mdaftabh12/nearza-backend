@@ -7,30 +7,30 @@ import {
 } from "sequelize";
 import { sequelize } from "../../config/sequelize";
 
-/**
- * ENUMS & TYPES
- */
+// ENUMS & TYPES
 export type UserStatus = "ACTIVE" | "DISABLED" | "BLOCKED" | "SUSPENDED";
 export type UserRole = "ADMIN" | "CUSTOMER" | "SELLER";
 
 class User extends Model<
-  InferAttributes<User, { omit: "createdAt" | "updatedAt" }>,
-  InferCreationAttributes<User, { omit: "createdAt" | "updatedAt" }>
+  InferAttributes<User, { omit: "createdAt" | "updatedAt" | "deletedAt" }>,
+  InferCreationAttributes<User, { omit: "createdAt" | "updatedAt" | "deletedAt" }>
 > {
   declare id: CreationOptional<number>;
-  declare fullName: string;
-  declare email: string;
-  declare phone: string;
+
+  declare fullName: string | null;
+  declare email: string | null;
+  declare phone: string | null;
 
   declare roles: CreationOptional<UserRole[]>;
   declare status: CreationOptional<UserStatus>;
 
-  declare profileImage: CreationOptional<string | null>;
-  declare refreshToken: CreationOptional<string | null>;
+  declare profileImage: string | null;
+  declare refreshToken: string | null;
 
   // timestamps
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
+  declare deletedAt: CreationOptional<Date | null>;
 }
 
 User.init(
@@ -43,12 +43,12 @@ User.init(
 
     fullName: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
     },
 
     email: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
       unique: true,
       validate: {
         isEmail: true,

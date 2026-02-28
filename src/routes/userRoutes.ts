@@ -9,7 +9,6 @@ import {
   completeUserProfile,
   logout,
   deleteAccount,
-  restoreMyProfile,
   getAllUsers,
   updateAccountStatus,
   getUserById,
@@ -56,9 +55,6 @@ router.post("/logout", userAuth, logout);
 
 // Delete user account (soft delete) : DELETE
 router.delete("/delete-account", userAuth, deleteAccount);
-
-// Restore soft-deleted user profile : POST
-router.post("/restore-profile", userAuth, restoreMyProfile);
 
 // ================================================
 // 👑 ADMIN ROUTES (Admin Authentication Required)

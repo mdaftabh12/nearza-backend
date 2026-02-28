@@ -27,7 +27,7 @@ export const sendOtpSchema = z.object({
         .string()
         .regex(
           /^[6-9][0-9]{9}$/,
-          "Phone number must be valid 10-digit Indian mobile number",
+          "Phone number must be valid 10 digits.",
         )
         .optional()
         .transform((v) => (v === "" ? undefined : v)),
@@ -49,7 +49,7 @@ export const verifyOtpSchema = z.object({
     .object({
       email: z
         .string()
-        .email({ message: "Please enter a valid email address" })
+        .email({ message: "Please enter a valid email address." })
         .regex(
           /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|org|in|net|edu|gov|co\.in|co\.uk)$/,
           "Email must end with valid domain extensions like .com, .org, .in, .net, .edu, .gov",
@@ -59,7 +59,7 @@ export const verifyOtpSchema = z.object({
 
       phone: z
         .string()
-        .regex(/^[6-9][0-9]{9}$/, "Phone number must be valid 10 digits ")
+        .regex(/^[6-9][0-9]{9}$/, "Phone number must be valid 10 digits.")
         .optional()
         .transform((v) => (v === "" ? undefined : v)),
 
@@ -87,7 +87,7 @@ export const completeUserProfileSchema = z.object({
 
       email: z
         .string()
-        .email({ message: "Please enter a valid email address" })
+        .email({ message: "Please enter a valid email address." })
         .regex(
           /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|org|in|net|edu|gov|co\.in|co\.uk)$/,
           "Email must end with valid domain extensions like .com, .org, .in, .net, .edu, .gov",
@@ -96,29 +96,9 @@ export const completeUserProfileSchema = z.object({
 
       phone: z
         .string()
-        .regex(/^[6-9][0-9]{9}$/, "Invalid Indian phone number")
-        .optional(),
-
-      addresses: z
-        .array(
-          z.object({
-            type: z.enum(["home", "work", "other"]).optional(),
-            street: z.string().min(5).max(200).optional(),
-            city: z.string().min(2).max(50).optional(),
-            state: z.string().min(2).max(50).optional(),
-            pincode: z
-              .string()
-              .regex(/^[0-9]{6}$/, "Invalid pincode")
-              .optional(),
-            country: z.string().min(2).max(50).optional(),
-            isDefault: z.boolean().optional(),
-          }),
-        )
+        .regex(/^[6-9][0-9]{9}$/, "Phone number must be valid 10 digits.")
         .optional(),
     })
-    .refine((data) => Object.keys(data).length > 0, {
-      message: "At least one field is required to update profile",
-    }),
 });
 
 // =============================================
@@ -146,11 +126,8 @@ export const getAllUsersSchema = z.object({
   query: z.object({
     page: z.coerce.number().int().min(1).default(1),
     limit: z.coerce.number().int().min(1).max(100).default(20),
-
     search: z.string().trim().min(1).max(100).optional(),
-
     role: z.enum(["CUSTOMER", "SELLER", "ADMIN"]).optional(),
-
     status: z.enum(["ACTIVE", "DISABLED", "BLOCKED", "SUSPENDED"]).optional(),
   }),
 });

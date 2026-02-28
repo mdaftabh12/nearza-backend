@@ -23,6 +23,7 @@ Ye system **OTP (One-Time Password)** use karke users ko login/signup karne deta
 - ✅ **Secure** - JWT tokens aur HttpOnly cookies
 - ✅ **5-Minute OTP Validity** - Security ke liye
 - ✅ **Dual Database** - MongoDB (OTP) + SQL (Users)
+- ✅ **Soft Delete Support** - Account restore window (24h to 30 days)
 
 ---
 
@@ -70,9 +71,9 @@ Step 2: Verify OTP
                      ▼
 ┌─────────────────────────────────────────────────────────┐
 │  Backend Verification:                                  │
-│  1. Find OTP in MongoDB (latest entry)                  │
-│  2. Check: OTP valid hai? (match + not expired)         │
-│  3. Check user in SQL database                          │
+│  1. Find latest OTP in MongoDB (match + expiry check)   │
+│  2. Check user in SQL database (paranoid: false)        │
+│     → includes soft-deleted users                       │
 └────────────────────┬────────────────────────────────────┘
                      │
             ┌────────┴────────┐
@@ -86,20 +87,40 @@ Step 2: Verify OTP
            │                  ▼
            │          ┌──────────────────┐
            │          │ Create User:     │
-           │          │ - fullName: Guest│
            │          │ - email/phone    │
-           │          │ - roles: CUSTOMER│
-           │          │ - status: ACTIVE │
+           │          │   (other fields  │
+           │          │   use DB defaults│
+           │          │   )              │
+           │          │ - isNewUser=true │
            │          └──────┬───────────┘
            │                 │
            └─────────┬───────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────┐
+│  Soft-Delete Check (if user.deletedAt exists):          │
+│                                                         │
+│  < 24 hours since deletion  → ❌ BLOCK (wait 24h)       │
+│  24h to 30 days             → ✅ AUTO RESTORE account   │
+│  > 30 days                  → ❌ BLOCK (permanently     │
+│                                  deleted)               │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│  Status Check:                                          │
+│  BLOCKED    → ❌ 403 Error                              │
+│  DISABLED   → ❌ 403 Error                              │
+│  SUSPENDED  → ❌ 403 Error                              │
+│  ACTIVE     → ✅ Continue                               │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
 │  Token Generation & Cleanup:                            │
-│  1. Generate JWT token (user id, email, roles)          │
-│  2. Delete used OTP from MongoDB                        │
-│  3. Set token in HttpOnly cookie                        │
+│  1. Generate JWT token (id, email/phone, roles)         │
+│  2. Delete ALL OTPs for that email/phone from MongoDB   │
+│  3. Set token in HttpOnly cookie (maxAge: 24h)          │
 │  4. Return response with:                               │
 │     - token                                             │
 │     - user data                                         │
@@ -158,16 +179,15 @@ Step 2: Verify OTP
    - Phone: exactly 10 digits, numbers only
 
 2. **OTP Generation:**
-   - 6-digit random number generate
-   - Example: 123456
+   - 6-digit random number generate (`generateOTP()` utility)
 
 3. **Database Storage (MongoDB):**
-   - Store: email/phone, otp, expiresAt
-   - Expiry: Current time + 5 minutes
+   - Store: email/phone (only whichever is provided), otp, expiresAt
+   - Expiry: `process.env.OTP_EXPIRY_MINUTES` (default: 5 minutes)
 
 4. **Response:**
    - Development: OTP response me milta hai
-   - Production: OTP email/SMS se jayega
+   - Production: OTP email/SMS se jayega (TODO)
 
 **✅ Success Response:**
 
@@ -179,7 +199,7 @@ Step 2: Verify OTP
     "phone": null,
     "otp": "123456"
   },
-  "message": "OTP sent successfully"
+  "message": "A one-time verification code has been sent successfully."
 }
 ```
 
@@ -227,29 +247,32 @@ Step 2: Verify OTP
 **⚙️ Backend Logic:**
 
 1. **OTP Verification:**
-   - MongoDB me latest OTP find karo
-   - Check 1: OTP match karta hai?
-   - Check 2: Expire to nahi ho gaya? (5 min check)
+   - MongoDB me `{ email/phone, otp }` se latest record find karo (sorted by `createdAt: -1`)
+   - Check 1: OTP record milta hai?
+   - Check 2: `otpRecord.expiresAt < currentTime` → expired?
 
 2. **User Lookup:**
-   - SQL database me user search karo (email/phone se)
+   - SQL database me user search karo (`paranoid: false` — soft-deleted users bhi include)
+
 3. **User Not Found (New User):**
-   - Naya user create karo:
-     - fullName: "Guest"
-     - email: provided email OR auto-generated
-     - phone: provided phone OR default "0000000000"
-     - roles: ["CUSTOMER"]
-     - status: "ACTIVE"
-   - isNewUser flag = true
+   - Naya user create karo with only `email` or `phone` (DB defaults for rest)
+   - `isNewUser` flag = `true`
 
-4. **User Found (Existing User):**
-   - Existing user data fetch karo
-   - isNewUser flag = false
+4. **Soft-Deleted User Check:**
+   - `user.deletedAt` present hai to time since deletion calculate karo:
+     - **< 24 hours** → `403` error: must wait 24 hours
+     - **24h – 30 days** → `user.restore()` automatically
+     - **> 30 days** → `403` error: permanently deleted
 
-5. **Token & Cleanup:**
-   - JWT token generate (user id, email, roles)
-   - Used OTP delete karo (security)
-   - Token ko HttpOnly cookie me set karo
+5. **Status Check:**
+   - `BLOCKED` → `403` error
+   - `DISABLED` → `403` error
+   - `SUSPENDED` → `403` error
+
+6. **Token & Cleanup:**
+   - JWT token generate (`id`, `email`/`phone`, `roles`)
+   - **ALL OTPs** for that email/phone delete karo (`deleteMany`)
+   - Token ko HttpOnly cookie me set karo (`maxAge: 24h`)
    - Response bhejo
 
 **✅ Success Response (New User):**
@@ -261,7 +284,7 @@ Step 2: Verify OTP
     "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
     "user": {
       "id": 1,
-      "fullName": "Guest",
+      "fullName": null,
       "email": "user@gmail.com",
       "phone": null,
       "roles": ["CUSTOMER"],
@@ -275,7 +298,7 @@ Step 2: Verify OTP
     },
     "isNewUser": true
   },
-  "message": "Authentication successful"
+  "message": "You have been authenticated successfully."
 }
 ```
 
@@ -300,7 +323,7 @@ Step 2: Verify OTP
     },
     "isNewUser": false
   },
-  "message": "Authentication successful"
+  "message": "You have been authenticated successfully."
 }
 ```
 
@@ -311,13 +334,18 @@ Step 2: Verify OTP
 
 **❌ Error Scenarios:**
 
-| Error            | Reason                           | Message                                                               |
-| ---------------- | -------------------------------- | --------------------------------------------------------------------- |
-| Missing fields   | Email/phone ya OTP missing       | "Either email or phone is required to verify OTP" / "OTP is required" |
-| Invalid OTP      | Wrong OTP entered                | "Invalid OTP. Please try again."                                      |
-| Expired OTP      | 5 minutes se zyada ho gaye       | "OTP has expired. Please request a new one."                          |
-| Invalid format   | OTP not 6 digits                 | "OTP must be exactly 6 digits"                                        |
-| Contains letters | OTP me numbers ke alawa kuch hai | "OTP must contain only numbers"                                       |
+| Error               | Reason                              | Status | Message                                                                 |
+| ------------------- | ----------------------------------- | ------ | ----------------------------------------------------------------------- |
+| Missing fields      | Email/phone ya OTP missing          | 400    | "Either email or phone is required to verify OTP" / "OTP is required"  |
+| Invalid OTP format  | OTP not 6 digits                    | 400    | "OTP must be exactly 6 digits"                                          |
+| Contains letters    | OTP me numbers ke alawa kuch hai    | 400    | "OTP must contain only numbers"                                         |
+| Invalid OTP         | Wrong OTP entered / already used    | 400    | "The verification code you entered is invalid."                         |
+| Expired OTP         | 5 minutes se zyada ho gaye          | 400    | "The verification code has expired. Please request a new code."         |
+| Recently deleted    | Account deleted < 24 hours ago      | 403    | "Your account was recently deleted. You can restore it after 24 hours." |
+| Permanently deleted | Account deleted > 30 days ago       | 403    | "Your account has been permanently deleted."                            |
+| Account blocked     | Admin ne block kiya                 | 403    | "Your account has been blocked. Please contact support for assistance." |
+| Account disabled    | Account disabled                    | 403    | "Your account is currently disabled. Please reach out to support."      |
+| Account suspended   | Temporary suspension                | 403    | "Your account has been temporarily suspended. Please try again later."  |
 
 ---
 
@@ -333,17 +361,13 @@ Step 2: Verify OTP
 
 **⚙️ Backend Logic:**
 
-1. **Authentication Check:**
-   - JWT token verify karo
-   - User ID extract karo
+1. **Authorization Check:**
+   - `req.user?.id` check karo (set by `userAuth` middleware)
+   - Missing → `401` error
 
 2. **Data Fetch:**
-   - SQL database se user data fetch
-   - Seller profile bhi include (agar seller hai)
-   - Sensitive data hide karo (refreshToken)
-
-3. **Response:**
-   - Complete user profile return
+   - `userModel.findByPk(userId)` — SQL database se user fetch
+   - Not found → `404` error
 
 **✅ Success Response:**
 
@@ -358,12 +382,7 @@ Step 2: Verify OTP
     "roles": ["CUSTOMER"],
     "status": "ACTIVE",
     "profileImage": "https://example.com/profile.jpg",
-    "cart": [
-      {
-        "productId": 101,
-        "quantity": 2
-      }
-    ],
+    "cart": [{ "productId": 101, "quantity": 2 }],
     "wishlist": [201, 202, 203],
     "addresses": [
       {
@@ -374,26 +393,65 @@ Step 2: Verify OTP
         "pincode": "400001"
       }
     ],
-    "sellerProfile": null,
     "createdAt": "2024-01-15T10:00:00.000Z",
     "updatedAt": "2024-01-30T10:00:00.000Z"
   },
-  "message": "Profile fetched successfully"
+  "message": "Your profile has been retrieved successfully."
 }
 ```
 
 **❌ Error Scenarios:**
 
-| Error         | Reason                   | Message                                   |
-| ------------- | ------------------------ | ----------------------------------------- |
-| No token      | Token missing in request | "Authentication required. Please log in." |
-| Invalid token | Token tampered/wrong     | "Invalid authentication token."           |
-| Expired token | Token expired (>1 day)   | "Session expired. Please log in again."   |
-| User deleted  | User account deleted     | "User not found"                          |
+| Error         | Reason                  | Message                                          |
+| ------------- | ----------------------- | ------------------------------------------------ |
+| No user ID    | Token missing / invalid | "You are not authorized to perform this action." |
+| Invalid token | Token tampered/wrong    | "Invalid authentication token."                  |
+| Expired token | Token expired (> 1 day) | "Session expired. Please log in again."          |
+| User deleted  | User not found in DB    | "The requested user account could not be found." |
 
 ---
 
-### 4️⃣ Logout
+### 4️⃣ Complete User Profile
+
+**📍 Endpoint:** `PATCH /api/auth/profile`
+
+**📝 Purpose:** User apna profile complete/update kare (name, email, phone, image)
+
+**🔒 Authentication:** Required (JWT Token)
+
+**📥 Input:** `multipart/form-data`
+
+```
+fullName  (optional) - string
+email     (optional) - string
+phone     (optional) - string
+file      (optional) - image file (profileImage)
+```
+
+**⚙️ Backend Logic:**
+
+1. **Authorization Check:** `req.user?.id` verify karo
+2. **User Fetch:** `findByPk(userId)` — not found → `404`
+3. **Image Handling:**
+   - File uploaded hai → old image Cloudinary se delete karo
+   - New image Cloudinary par upload karo
+   - `secure_url` save karo; upload fail → `500` error
+4. **Other Fields:** `fullName`, `email`, `phone` — jo bhi provided hai update karo
+5. **Save:** `user.update(updateData)`
+
+**✅ Success Response:**
+
+```json
+{
+  "statusCode": 200,
+  "data": { /* updated user object */ },
+  "message": "Your profile has been updated successfully."
+}
+```
+
+---
+
+### 5️⃣ Logout
 
 **📍 Endpoint:** `POST /api/auth/logout`
 
@@ -406,19 +464,15 @@ Step 2: Verify OTP
 **⚙️ Backend Logic:**
 
 1. **Cookie Clear:**
-   - "token" naam ki cookie ko clear karo
-   - Same security settings ke sath (httpOnly, secure, sameSite)
-
-2. **Response:**
-   - Success message return
+   - `token` cookie clear karo same security settings ke sath (`httpOnly`, `secure`, `sameSite: strict`)
 
 **✅ Success Response:**
 
 ```json
 {
   "statusCode": 200,
-  "data": null,
-  "message": "Logged out successfully"
+  "data": "You have been logged out successfully.",
+  "message": "You have been logged out successfully."
 }
 ```
 
@@ -426,6 +480,144 @@ Step 2: Verify OTP
 
 - Local storage clear karo
 - User ko login page par redirect karo
+
+---
+
+### 6️⃣ Delete Account
+
+**📍 Endpoint:** `DELETE /api/auth/account`
+
+**📝 Purpose:** User apna account delete kare (soft delete)
+
+**🔒 Authentication:** Required (JWT Token)
+
+**📥 Input:** None
+
+**⚙️ Backend Logic:**
+
+1. **Authorization Check:** `req.user?.id` verify karo
+2. **User Fetch:** `findByPk(userId)` — not found → `404`
+3. **Soft Delete:** `user.destroy()` — `deletedAt` timestamp set hota hai (Sequelize paranoid)
+4. **Cleanup:** `refreshToken` null set karo, `token` cookie clear karo
+
+**✅ Success Response:**
+
+```json
+{
+  "statusCode": 200,
+  "data": "Your account has been deleted successfully.",
+  "message": "Your account has been deleted successfully."
+}
+```
+
+**⚠️ Restore Window:**
+
+```
+Deleted at T=0
+├── T < 24h       → Login blocked (wait 24 hours)
+├── 24h < T < 30d → Auto-restored on next successful login
+└── T > 30d       → Permanently blocked (cannot restore)
+```
+
+---
+
+## 🛡️ Admin Endpoints
+
+### 7️⃣ Get All Users (Admin Only)
+
+**📍 Endpoint:** `GET /api/admin/users`
+
+**📝 Purpose:** Paginated list of all users with search/filter
+
+**🔒 Authentication:** Admin role required
+
+**📥 Query Params:**
+
+| Param    | Type   | Default | Max | Description                       |
+| -------- | ------ | ------- | --- | --------------------------------- |
+| `page`   | number | 1       | —   | Page number (min: 1)              |
+| `limit`  | number | 20      | 100 | Results per page                  |
+| `search` | string | —       | —   | Search by fullName, email, phone  |
+| `role`   | string | —       | —   | Filter by role (e.g. `CUSTOMER`)  |
+| `status` | string | —       | —   | Filter by status (e.g. `ACTIVE`)  |
+
+**⚙️ Backend Logic:**
+- `search` → `Op.like` on `fullName`, `email`, `phone`
+- `role` → `JSON_CONTAINS` on `roles` JSON column (MySQL specific)
+- `status` → exact match
+- `refreshToken` column excluded from response
+- Ordered by `createdAt DESC`
+
+**✅ Success Response:**
+
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "users": [...],
+    "pagination": {
+      "total": 150,
+      "page": 1,
+      "limit": 20,
+      "totalPages": 8
+    }
+  },
+  "message": "User list retrieved successfully."
+}
+```
+
+---
+
+### 8️⃣ Update User Status (Admin Only)
+
+**📍 Endpoint:** `PATCH /api/admin/users/:userId/status`
+
+**📝 Purpose:** Admin kisi bhi user ka status change kare
+
+**🔒 Authentication:** Admin role required
+
+**📥 Input:**
+
+```json
+{
+  "status": "BLOCKED"
+}
+```
+
+**⚙️ Backend Logic:**
+- `userId` from route params (converted to `Number`)
+- `userModel.findByPk(userId)` — not found → `404`
+- `user.update({ status })`
+
+**✅ Success Response:**
+
+```json
+{
+  "statusCode": 200,
+  "data": { /* updated user object */ },
+  "message": "The user's account status has been updated successfully."
+}
+```
+
+---
+
+### 9️⃣ Get Single User (Admin View)
+
+**📍 Endpoint:** `GET /api/admin/users/:userId`
+
+**📝 Purpose:** Single user ka complete data fetch karna
+
+**🔒 Authentication:** Admin role required
+
+**✅ Success Response:**
+
+```json
+{
+  "statusCode": 200,
+  "data": { /* full user object */ },
+  "message": "User details retrieved successfully."
+}
+```
 
 ---
 
@@ -442,22 +634,28 @@ Step 2: Verify OTP
 
 ### Complete Error Reference:
 
-| Status  | Error Message                                       | When It Happens                         | User Action               |
-| ------- | --------------------------------------------------- | --------------------------------------- | ------------------------- |
-| **400** | "Either email or phone is required to generate OTP" | Email aur phone dono missing            | Koi ek field fill karo    |
-| **400** | "Please enter a valid email address"                | Invalid email format                    | Correct email daalo       |
-| **400** | "Phone number must be exactly 10 digits"            | Phone < 10 ya > 10 digits               | 10-digit number daalo     |
-| **400** | "Either email or phone is required to verify OTP"   | OTP verification me email/phone missing | Same email/phone use karo |
-| **400** | "OTP is required"                                   | OTP field empty                         | OTP enter karo            |
-| **400** | "OTP must be exactly 6 digits"                      | OTP 6 digits ka nahi                    | 6-digit OTP daalo         |
-| **400** | "OTP must contain only numbers"                     | OTP me letters/symbols                  | Sirf numbers daalo        |
-| **400** | "Invalid OTP. Please try again."                    | Wrong OTP entered                       | Correct OTP daalo         |
-| **400** | "OTP has expired. Please request a new one."        | 5 minutes se zyada ho gaya              | Naya OTP request karo     |
-| **401** | "Authentication required. Please log in."           | Token missing                           | Login karo                |
-| **401** | "Invalid authentication token."                     | Token invalid                           | Re-login karo             |
-| **401** | "Session expired. Please log in again."             | Token expired                           | Re-login karo             |
-| **404** | "User not found"                                    | User deleted/doesn't exist              | Re-signup karo            |
-| **500** | "Failed to generate OTP. Please try again."         | Database error                          | Retry karo                |
+| Status  | Error Message                                                                | When It Happens                          | User Action               |
+| ------- | ---------------------------------------------------------------------------- | ---------------------------------------- | ------------------------- |
+| **400** | "Either email or phone is required to generate OTP"                          | Email aur phone dono missing             | Koi ek field fill karo    |
+| **400** | "Please enter a valid email address"                                         | Invalid email format                     | Correct email daalo       |
+| **400** | "Phone number must be exactly 10 digits"                                     | Phone < 10 ya > 10 digits                | 10-digit number daalo     |
+| **400** | "Either email or phone is required to verify OTP"                            | OTP verify me email/phone missing        | Same email/phone use karo |
+| **400** | "OTP is required"                                                            | OTP field empty                          | OTP enter karo            |
+| **400** | "OTP must be exactly 6 digits"                                               | OTP 6 digits ka nahi                     | 6-digit OTP daalo         |
+| **400** | "OTP must contain only numbers"                                              | OTP me letters/symbols                   | Sirf numbers daalo        |
+| **400** | "The verification code you entered is invalid."                              | Wrong/already-used OTP                   | Correct/new OTP daalo     |
+| **400** | "The verification code has expired. Please request a new code."              | 5 minutes se zyada ho gaya               | Naya OTP request karo     |
+| **401** | "You are not authorized to perform this action."                             | Token/user ID missing                    | Login karo                |
+| **401** | "Invalid authentication token."                                              | Token invalid/tampered                   | Re-login karo             |
+| **401** | "Session expired. Please log in again."                                      | Token expired (> 1 day)                  | Re-login karo             |
+| **403** | "Your account was recently deleted. You can restore it after 24 hours."      | Deleted < 24h ago                        | 24h baad try karo         |
+| **403** | "Your account has been permanently deleted."                                 | Deleted > 30 days ago                    | New account banao         |
+| **403** | "Your account has been blocked. Please contact support for assistance."      | Admin ne block kiya                      | Support contact karo      |
+| **403** | "Your account is currently disabled. Please reach out to support."           | Account disabled                         | Support contact karo      |
+| **403** | "Your account has been temporarily suspended. Please try again later."       | Temporary suspension                     | Baad me try karo          |
+| **404** | "The requested user account could not be found."                             | User deleted/doesn't exist               | Re-signup karo            |
+| **500** | "Failed to generate OTP. Please try again."                                  | MongoDB connection issue                 | Retry karo                |
+| **500** | "Something went wrong while uploading your profile image. Please try again." | Cloudinary upload fail                   | Re-upload karo            |
 
 ---
 
@@ -465,7 +663,7 @@ Step 2: Verify OTP
 
 ### 🍃 MongoDB - OTP Collection
 
-**Purpose:** Temporary OTP storage (5-minute validity)
+**Purpose:** Temporary OTP storage (configurable validity)
 
 ```
 {
@@ -473,7 +671,7 @@ Step 2: Verify OTP
   email: String or null,
   phone: String or null,
   otp: String,                    // "123456"
-  expiresAt: Date,                // Current time + 5 minutes
+  expiresAt: Date,                // Current time + OTP_EXPIRY_MINUTES (default: 5)
   createdAt: Date                 // Auto-generated timestamp
 }
 ```
@@ -493,9 +691,9 @@ Step 2: Verify OTP
 
 **Indexes:**
 
-- email (for fast lookup)
-- phone (for fast lookup)
-- expiresAt (for automatic deletion)
+- `email` (for fast lookup)
+- `phone` (for fast lookup)
+- `expiresAt` (TTL index for automatic deletion)
 
 ---
 
@@ -507,16 +705,17 @@ Step 2: Verify OTP
 Column Name     | Type          | Description
 ----------------|---------------|----------------------------------
 id              | INTEGER       | Primary key (auto-increment)
-fullName        | VARCHAR(255)  | User's full name
-email           | VARCHAR(255)  | Unique email address
-phone           | VARCHAR(10)   | 10-digit phone number
+fullName        | VARCHAR(255)  | User's full name (nullable, filled via profile completion)
+email           | VARCHAR(255)  | Unique email (nullable if phone signup)
+phone           | VARCHAR(10)   | 10-digit phone number (nullable if email signup)
 roles           | JSON          | Array: ["CUSTOMER"] or ["SELLER", "CUSTOMER"]
 status          | ENUM          | ACTIVE, DISABLED, BLOCKED, SUSPENDED
-profileImage    | TEXT          | Profile picture URL
+profileImage    | TEXT          | Cloudinary secure_url
 cart            | JSON          | Array of cart items
 wishlist        | JSON          | Array of product IDs
 addresses       | JSON          | Array of address objects
-refreshToken    | TEXT          | For future token refresh feature
+refreshToken    | TEXT          | For future token refresh feature (excluded from API responses)
+deletedAt       | TIMESTAMP     | Soft delete timestamp (Sequelize paranoid mode)
 createdAt       | TIMESTAMP     | Account creation time
 updatedAt       | TIMESTAMP     | Last update time
 ```
@@ -531,7 +730,7 @@ updatedAt       | TIMESTAMP     | Last update time
   "phone": "9876543210",
   "roles": ["CUSTOMER"],
   "status": "ACTIVE",
-  "profileImage": "https://example.com/john.jpg",
+  "profileImage": "https://res.cloudinary.com/example/john.jpg",
   "cart": [{ "productId": 101, "quantity": 2 }],
   "wishlist": [201, 202],
   "addresses": [
@@ -544,6 +743,7 @@ updatedAt       | TIMESTAMP     | Last update time
     }
   ],
   "refreshToken": null,
+  "deletedAt": null,
   "createdAt": "2024-01-15T10:00:00.000Z",
   "updatedAt": "2024-01-30T10:00:00.000Z"
 }
@@ -551,8 +751,9 @@ updatedAt       | TIMESTAMP     | Last update time
 
 **Indexes:**
 
-- email (unique)
-- phone
+- `email` (unique)
+- `phone`
+- `deletedAt` (for paranoid queries)
 
 ---
 
@@ -563,9 +764,9 @@ updatedAt       | TIMESTAMP     | Last update time
 ```
 Feature               | Implementation
 ----------------------|----------------------------------
-Expiry Time           | 5 minutes (300 seconds)
-One-Time Use          | OTP delete after verification
-Latest OTP Priority   | Agar multiple OTPs hai, latest wala use hoga
+Expiry Time           | OTP_EXPIRY_MINUTES env var (default: 5 min)
+One-Time Use          | deleteMany (ALL OTPs for email/phone) after verification
+Latest OTP Priority   | .sort({ createdAt: -1 }) — latest OTP wins
 Length                | 6 digits (000000 to 999999)
 Type                  | Numeric only
 Storage               | MongoDB (temporary)
@@ -577,22 +778,32 @@ Storage               | MongoDB (temporary)
 Feature               | Implementation
 ----------------------|----------------------------------
 Type                  | JWT (JSON Web Token)
-Expiry                | 1 day (24 hours)
+Expiry                | 1 day (24 hours) via cookie maxAge
 Storage               | HttpOnly Cookie (XSS protection)
-Secure Flag           | true (HTTPS only in production)
+Secure Flag           | true in production (HTTPS only)
 SameSite              | strict (CSRF protection)
-Payload               | user id, email, roles (no password)
+Payload               | user id, email/phone (whichever present), roles
 ```
 
 ### 3️⃣ Cookie Configuration
 
 ```
-Property         | Value      | Purpose
------------------|------------|---------------------------
-httpOnly         | true       | JavaScript se access nahi
-secure           | true       | HTTPS-only transmission
-sameSite         | strict     | CSRF attack prevention
-maxAge           | Not set    | Session cookie (browser close pe delete)
+Property         | Value                      | Purpose
+-----------------|----------------------------|---------------------------
+httpOnly         | true                       | JavaScript se access nahi
+secure           | true (production only)     | HTTPS-only transmission
+sameSite         | strict                     | CSRF attack prevention
+maxAge           | 86400000 ms (24 hours)     | Auto-expire after 1 day
+```
+
+### 4️⃣ Account Deletion Policy (Soft Delete)
+
+```
+Time Since Deletion  | Login Attempt Result
+---------------------|------------------------------------------
+< 24 hours           | ❌ Blocked — "restore after 24 hours"
+24h – 30 days        | ✅ Auto-restored on successful OTP verify
+> 30 days            | ❌ Blocked — "permanently deleted"
 ```
 
 ---
@@ -606,14 +817,15 @@ maxAge           | Not set    | Session cookie (browser close pe delete)
 - ✅ OTP response me visible hai (testing ke liye)
 - ✅ Console logs enabled
 - ✅ Detailed error messages
+- ⚠️ `secure` cookie flag: `false` (HTTP allowed)
 
 **Production:**
 
 - ❌ OTP response me nahi bhejana
-- ✅ Email/SMS service integrate karo
+- ✅ Email/SMS service integrate karo (TODO in code)
 - ✅ Rate limiting add karo (OTP spam prevention)
 - ✅ Proper logging setup
-- ✅ HTTPS mandatory
+- ✅ HTTPS mandatory (`secure: true` auto-enabled via `NODE_ENV=production`)
 - ✅ Generic error messages (security)
 
 ### ⏱️ Timing Diagram
@@ -636,17 +848,17 @@ T = 5:02        Same OTP entered → ❌ Expired
 
 ```
 Scenario 1: Normal Flow
-Request OTP → OTP stored → User verifies → OTP deleted ✅
+Request OTP → OTP stored → User verifies → ALL OTPs for email/phone deleted ✅
 
 Scenario 2: Multiple OTPs
 Request OTP #1 (123456)
 Request OTP #2 (789012) ← Latest
-Verify with 789012 → ✅ Success (latest OTP works)
-Verify with 123456 → ❌ Fails (old OTP ignored)
+Verify with 789012 → ✅ Success (latest OTP via .sort createdAt: -1)
+Verify with 123456 → ❌ Fails (older OTP, sort picks 789012 first)
 
 Scenario 3: Already Used
-Request OTP → Verify → OTP deleted
-Try to verify again → ❌ "Invalid OTP" (already deleted)
+Request OTP → Verify → ALL OTPs deleted via deleteMany
+Try to verify again → ❌ "The verification code you entered is invalid."
 ```
 
 ---
@@ -659,7 +871,7 @@ Try to verify again → ❌ "Invalid OTP" (already deleted)
 isNewUser = true
 └─ Matlab: User pehli baar login kar raha hai
    └─ Frontend Action: Profile completion page par bhejo
-      └─ User ko naam, address wagera fill karne do
+      └─ User ko fullName, phone/email wagera fill karne do
 
 isNewUser = false
 └─ Matlab: User pehle se registered hai
@@ -671,7 +883,7 @@ isNewUser = false
 
 ```
 ACTIVE      → Normal user, full access
-DISABLED    → Account temporarily disabled by user
+DISABLED    → Account temporarily disabled
 BLOCKED     → Admin ne block kiya (policy violation)
 SUSPENDED   → Temporary suspension (under review)
 ```
@@ -681,7 +893,7 @@ SUSPENDED   → Temporary suspension (under review)
 ```
 CUSTOMER    → Normal buyer
 SELLER      → Can sell products (extra sellerProfile table)
-ADMIN       → Full system access (future feature)
+ADMIN       → Full system access
 
 Note: Ek user ke multiple roles ho sakte hain
 Example: ["CUSTOMER", "SELLER"] - Buyer bhi, seller bhi
